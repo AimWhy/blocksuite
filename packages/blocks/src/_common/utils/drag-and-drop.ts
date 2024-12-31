@@ -1,17 +1,16 @@
-import { assertExists } from '@blocksuite/global/utils';
-import type { BaseBlockModel } from '@blocksuite/store';
+import type { BlockComponent } from '@blocksuite/block-std';
+import type { BlockModel } from '@blocksuite/store';
 
-import { matchFlavours } from './model.js';
 import {
-  type BlockComponentElement,
-  DropFlags,
-  getClosestBlockElementByElement,
-  getDropRectByPoint,
-  getModelByBlockElement,
-  getRectByBlockElement,
-} from './query.js';
-import { type Point, Rect } from './rect.js';
-import { type EditingState } from './types.js';
+  getClosestBlockComponentByElement,
+  getRectByBlockComponent,
+  matchFlavours,
+} from '@blocksuite/affine-shared/utils';
+import { type Point, Rect } from '@blocksuite/global/utils';
+
+import type { EditingState } from '../types.js';
+
+import { DropFlags, getDropRectByPoint } from './query.js';
 
 /**
  * A dropping type.
@@ -29,22 +28,21 @@ export type DropResult = {
  */
 export function calcDropTarget(
   point: Point,
-  model: BaseBlockModel,
+  model: BlockModel,
   element: Element,
-  draggingElements: BlockComponentElement[],
-  scale: number,
+  draggingElements: BlockComponent[] = [],
+  scale: number = 1,
   flavour: string | null = null // for block-hub
 ): DropResult | null {
-  const schema = model.page.getSchemaByFlavour('affine:database');
-  assertExists(schema);
-  const children = schema.model.children ?? [];
+  const schema = model.doc.getSchemaByFlavour('affine:database');
+  const children = schema?.model.children ?? [];
 
   let shouldAppendToDatabase = true;
 
   if (children.length) {
     if (draggingElements.length) {
       shouldAppendToDatabase = draggingElements
-        .map(getModelByBlockElement)
+        .map(el => el.model)
         .every(m => children.includes(m.flavour));
     } else if (flavour) {
       shouldAppendToDatabase = children.includes(flavour);
@@ -52,10 +50,10 @@ export function calcDropTarget(
   }
 
   if (!shouldAppendToDatabase && !matchFlavours(model, ['affine:database'])) {
-    const databaseBlockElement = element.closest('affine-database');
-    if (databaseBlockElement) {
-      element = databaseBlockElement;
-      model = getModelByBlockElement(element);
+    const databaseBlockComponent = element.closest('affine-database');
+    if (databaseBlockComponent) {
+      element = databaseBlockComponent;
+      model = databaseBlockComponent.model;
     }
   }
 
@@ -76,7 +74,7 @@ export function calcDropTarget(
       modelState: {
         model,
         rect: domRect,
-        element: element as BlockComponentElement,
+        element: element as BlockComponent,
       },
     };
   } else if (flag === DropFlags.Database) {
@@ -97,7 +95,7 @@ export function calcDropTarget(
       modelState: {
         model,
         rect: domRect,
-        element: element as BlockComponentElement,
+        element: element as BlockComponent,
       },
     };
   }
@@ -122,7 +120,7 @@ export function calcDropTarget(
       ) {
         type = 'none';
       } else {
-        prevRect = getRectByBlockElement(prev);
+        prevRect = getRectByBlockComponent(prev);
       }
     } else {
       prev = element.parentElement?.previousElementSibling;
@@ -146,12 +144,13 @@ export function calcDropTarget(
         next = null;
       }
     } else {
-      next = getClosestBlockElementByElement(element.parentElement)
-        ?.nextElementSibling;
+      next = getClosestBlockComponentByElement(
+        element.parentElement
+      )?.nextElementSibling;
     }
 
     if (next) {
-      nextRect = getRectByBlockElement(next);
+      nextRect = getRectByBlockComponent(next);
       offsetY = (nextRect.top - domRect.bottom) / 2;
     }
   }
@@ -171,7 +170,7 @@ export function calcDropTarget(
     modelState: {
       model,
       rect: domRect,
-      element: element as BlockComponentElement,
+      element: element as BlockComponent,
     },
   };
 }

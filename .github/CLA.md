@@ -48,7 +48,7 @@ Example:
 - Innei, @Innei, 2023/02/09
 - gotjoshua, @gotjoshua, 2023/02/10
 - Fangdun Tsai, @fundon, 2023/02/13
-- Zhilin Liu, @lzlme, 2023/02/16
+- Zhilin Liu, @devlzl, 2023/02/16
 - zqran, @zqran, 2023/02/17
 - shengxinjing, @shengxinjing, 2023/02/20
 - qinluhe, @qinluhe, 2023/02/21
@@ -90,7 +90,6 @@ Example:
 - Garfield Lee, @Garfield550, 2023/08/09
 - wiirhan @wiirhan 2023/08/10
 - Tomoyuki Yamada @tomoyukiy 2023/08/11
-- devlzl @devlzl 2023/08/12
 - WBbug @WBbug 2023/08/16
 - Quan Deng @dengquan 2023/08/21
 - Ayaka Rizumu @LittleSound 2023/08/22
@@ -113,3 +112,23 @@ Example:
 - minjuSong @mingjuu 2023/11/26
 - Seohyun Park, @sseooh, 2023/11/26
 - Eunseo Seo, @ddeonseo, 2023/11/29
+- Gaurav Ruhela, @gauravruhela07, 2023/12/07
+- Han @nawbc, 2023/12/14
+- Antriksh Dangi, @antriksh-9, 2023/12/18
+- Umar Faiz, @umar23faiz, 2023/12/29
+- Adithyan, @golok727, 2024/02/10
+- zkwolf, @zkwolf, 2024/2/19
+- Yuntian Sun, @ununian, 2024/02/20
+- wumo, @wumo1016, 2024/2/27
+- Yuan Congzhou, @congzhou09, 2024/03/01
+- RhonJoe, @JunIce, 2024/03/04
+- Lebedev Konstantin, @RubaXa, 2024/04/04
+- GambleMeow, @GambleMeow, 2024/04/10
+- Shcherbakov Sergey, @F4lkr4m, 2024/04/24
+- Kirill T., @shvixxl, 2024/05/03
+- Eugene Olisevich, @@EugeneOlisevich, 2024/06/05
+- Zheng Pan, @pzppzz, 2024/06/24
+- Samuel Golmann, @goldsam, 2024/07/29
+- satoren, @satoren, 2024/08/09
+- Nikita Minaev, @majula2111, 2024/09/26
+- Oleg, @OlegDev1, 2024/12/03

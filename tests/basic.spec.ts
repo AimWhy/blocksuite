@@ -1,4 +1,4 @@
-import './utils/declare-test-window.js';
+import type { DeltaInsert } from '@inline/types.js';
 
 import { expect } from '@playwright/test';
 
@@ -7,12 +7,12 @@ import {
   captureHistory,
   click,
   disconnectByClick,
-  dragBetweenIndices,
   enterPlaygroundRoom,
   focusRichText,
   focusTitle,
   getCurrentEditorTheme,
   getCurrentHTMLTheme,
+  getPageSnapshot,
   initEmptyEdgelessState,
   initEmptyParagraphState,
   pressArrowLeft,
@@ -25,9 +25,7 @@ import {
   redoByClick,
   redoByKeyboard,
   setSelection,
-  SHORT_KEY,
   switchEditorMode,
-  switchReadonly,
   toggleDarkMode,
   type,
   undoByClick,
@@ -38,16 +36,15 @@ import {
 import {
   assertBlockChildrenIds,
   assertEmpty,
+  assertRichTextInlineDeltas,
   assertRichTexts,
-  assertRichTextVirgoDeltas,
-  assertStore,
-  assertStoreMatchJSX,
   assertText,
   assertTitle,
-  defaultStore,
 } from './utils/asserts.js';
 import { scoped, test } from './utils/playwright.js';
 import { getFormatBar } from './utils/query.js';
+
+const BASIC_DEFAULT_SNAPSHOT = 'basic test default';
 
 test(scoped`basic input`, async ({ page }) => {
   await enterPlaygroundRoom(page);
@@ -56,7 +53,9 @@ test(scoped`basic input`, async ({ page }) => {
   await type(page, 'hello');
 
   await test.expect(page).toHaveTitle(/BlockSuite/);
-  await assertStore(page, defaultStore);
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${BASIC_DEFAULT_SNAPSHOT}.json`
+  );
   await assertText(page, 'hello');
 });
 
@@ -64,23 +63,23 @@ test(scoped`basic init with external text`, async ({ page }) => {
   await enterPlaygroundRoom(page);
 
   await page.evaluate(() => {
-    const { page } = window;
-    const pageId = page.addBlock('affine:page', {
-      title: new page.Text('hello'),
+    const { doc } = window;
+    const rootId = doc.addBlock('affine:page', {
+      title: new doc.Text('hello'),
     });
-    const note = page.addBlock('affine:note', {}, pageId);
+    const note = doc.addBlock('affine:note', {}, rootId);
 
-    const text = new page.Text('world');
-    page.addBlock('affine:paragraph', { text }, note);
+    const text = new doc.Text('world');
+    doc.addBlock('affine:paragraph', { text }, note);
 
     const delta = [
       { insert: 'foo ' },
       { insert: 'bar', attributes: { bold: true } },
     ];
-    page.addBlock(
+    doc.addBlock(
       'affine:paragraph',
       {
-        text: page.Text.fromDelta(delta),
+        text: new doc.Text(delta as DeltaInsert[]),
       },
       note
     );
@@ -103,7 +102,6 @@ test(scoped`basic multi user state`, async ({ context, page: pageA }) => {
   await enterPlaygroundRoom(pageB, {
     flags: {},
     room,
-    blobStorage: undefined,
     noInit: true,
   });
   await waitDefaultPageLoaded(pageB);
@@ -127,7 +125,6 @@ test(
     await enterPlaygroundRoom(pageB, {
       flags: {},
       room,
-      blobStorage: undefined,
       noInit: true,
     });
 
@@ -135,8 +132,12 @@ test(
     await assertText(pageB, 'hello');
     await Promise.all([
       assertText(pageA, 'hello'),
-      assertStore(pageA, defaultStore),
-      assertStore(pageB, defaultStore),
+      expect(await getPageSnapshot(pageA, true)).toMatchSnapshot(
+        `${BASIC_DEFAULT_SNAPSHOT}.json`
+      ),
+      expect(await getPageSnapshot(pageB, true)).toMatchSnapshot(
+        `${BASIC_DEFAULT_SNAPSHOT}.json`
+      ),
       assertBlockChildrenIds(pageA, '0', ['1']),
       assertBlockChildrenIds(pageB, '0', ['1']),
     ]);
@@ -151,11 +152,10 @@ test(scoped`A first open, B first edit`, async ({ context, page: pageA }) => {
 
   const pageB = await context.newPage();
   await enterPlaygroundRoom(pageB, {
-    flags: {},
     room,
-    blobStorage: undefined,
     noInit: true,
   });
+  await pageB.waitForTimeout(500);
   await focusRichText(pageB);
 
   await waitNextFrame(pageA);
@@ -167,8 +167,12 @@ test(scoped`A first open, B first edit`, async ({ context, page: pageA }) => {
   await assertText(pageA, 'hello');
   await assertText(pageB, 'hello');
   await Promise.all([
-    assertStore(pageA, defaultStore),
-    assertStore(pageB, defaultStore),
+    expect(await getPageSnapshot(pageA, true)).toMatchSnapshot(
+      `${BASIC_DEFAULT_SNAPSHOT}.json`
+    ),
+    expect(await getPageSnapshot(pageB, true)).toMatchSnapshot(
+      `${BASIC_DEFAULT_SNAPSHOT}.json`
+    ),
   ]);
 });
 
@@ -252,41 +256,6 @@ test(scoped`undo after adding block twice`, async ({ page }) => {
   await assertRichTexts(page, ['hello', 'world']);
 });
 
-test(
-  scoped`should readonly mode not be able to modify text`,
-  async ({ page }) => {
-    await enterPlaygroundRoom(page);
-    const { paragraphId } = await initEmptyParagraphState(page);
-
-    await focusRichText(page);
-    await type(page, 'hello');
-    await switchReadonly(page);
-
-    await dragBetweenIndices(page, [0, 1], [0, 3]);
-    await page.keyboard.press(`${SHORT_KEY}+b`);
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:paragraph
-  prop:text="hello"
-  prop:type="text"
-/>`,
-      paragraphId
-    );
-
-    await undoByKeyboard(page);
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:paragraph
-  prop:text="hello"
-  prop:type="text"
-/>`,
-      paragraphId
-    );
-  }
-);
-
 test(scoped`undo/redo twice after adding block twice`, async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
@@ -317,68 +286,33 @@ test(scoped`should undo/redo works on title`, async ({ page }) => {
   await type(page, 'title');
   await focusRichText(page);
   await type(page, 'hello world');
-  await captureHistory(page);
-  let i = 5;
-  while (i--) {
-    await pressBackspace(page);
-  }
 
-  await focusTitle(page);
-  await captureHistory(page);
-  await type(page, ' something');
-  await undoByKeyboard(page);
   await assertTitle(page, 'title');
+  await assertRichTexts(page, ['hello world']);
+
+  await captureHistory(page);
+  await pressBackspace(page, 5);
+  await captureHistory(page);
+  await focusTitle(page);
+  await type(page, ' something');
+
+  await assertTitle(page, 'title something');
   await assertRichTexts(page, ['hello ']);
 
   await focusRichText(page);
+  await undoByKeyboard(page);
+  await assertTitle(page, 'title');
+  await assertRichTexts(page, ['hello ']);
   await undoByKeyboard(page);
   await assertTitle(page, 'title');
   await assertRichTexts(page, ['hello world']);
 
-  await focusTitle(page);
   await redoByKeyboard(page);
   await assertTitle(page, 'title');
   await assertRichTexts(page, ['hello ']);
-
-  await focusTitle(page);
   await redoByKeyboard(page);
   await assertTitle(page, 'title something');
   await assertRichTexts(page, ['hello ']);
-});
-
-test(scoped`should undo/redo cursor works on title`, async ({ page }) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyParagraphState(page);
-  await waitNextFrame(page);
-
-  await focusTitle(page);
-  await type(page, 'title');
-  await focusRichText(page);
-  await type(page, 'hello');
-  await captureHistory(page);
-
-  await assertTitle(page, 'title');
-  await assertRichTexts(page, ['hello']);
-
-  await focusTitle(page);
-  await type(page, '1');
-  await focusRichText(page);
-  await undoByKeyboard(page);
-  await waitNextFrame(page);
-  await type(page, '2');
-  await assertTitle(page, 'title2');
-  await assertRichTexts(page, ['hello']);
-
-  await type(page, '3');
-  await focusRichText(page);
-  await waitNextFrame(page);
-  await undoByKeyboard(page);
-  await waitNextFrame(page);
-  await redoByKeyboard(page);
-  await waitNextFrame(page);
-  await type(page, '4');
-  await assertTitle(page, 'title23');
-  await assertRichTexts(page, ['hello4']);
 });
 
 test(scoped`undo multi notes`, async ({ page }) => {
@@ -485,65 +419,29 @@ test('when no note block, click editing area auto add a new note block', async (
   await initEmptyEdgelessState(page);
 
   await switchEditorMode(page);
-  await page.locator('affine-note').click({ force: true });
+  await page.locator('affine-edgeless-note').click({ force: true });
   await pressBackspace(page);
   await switchEditorMode(page);
-  let note = await page.evaluate(() => {
-    return document.querySelector('affine-note');
+  const edgelessNote = await page.evaluate(() => {
+    return document.querySelector('affine-edgeless-note');
   });
-  expect(note).toBeNull();
+  expect(edgelessNote).toBeNull();
   await click(page, { x: 200, y: 280 });
 
-  note = await page.evaluate(() => {
+  const pageNote = await page.evaluate(() => {
     return document.querySelector('affine-note');
   });
-  expect(note).not.toBeNull();
+  expect(pageNote).not.toBeNull();
 });
 
-test(scoped`automatic identify url text`, async ({ page }) => {
+test(scoped`automatic identify url text`, async ({ page }, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await focusRichText(page);
   await type(page, 'abc https://google.com ');
 
-  await assertStoreMatchJSX(
-    page,
-    /*xml*/ `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text={
-        <>
-          <text
-            insert="abc "
-          />
-          <text
-            insert="https://google.com"
-            link="https://google.com"
-          />
-          <text
-            insert=" "
-          />
-        </>
-      }
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_final.json`
   );
 });
 
@@ -571,7 +469,7 @@ test('extended inline format', async ({ page }) => {
   await underlineBtn.click();
   await strikeBtn.click();
   await codeBtn.click();
-  await assertRichTextVirgoDeltas(page, [
+  await assertRichTextInlineDeltas(page, [
     {
       insert: 'aaa',
     },
@@ -594,7 +492,7 @@ test('extended inline format', async ({ page }) => {
   await setSelection(page, 2, 3, 2, 3);
   await captureHistory(page);
   await type(page, 'c');
-  await assertRichTextVirgoDeltas(page, [
+  await assertRichTextInlineDeltas(page, [
     {
       insert: 'aaac',
     },
@@ -617,7 +515,7 @@ test('extended inline format', async ({ page }) => {
   // aaab|bbccc
   await setSelection(page, 2, 4, 2, 4);
   await type(page, 'c');
-  await assertRichTextVirgoDeltas(page, [
+  await assertRichTextInlineDeltas(page, [
     {
       insert: 'aaa',
     },
@@ -640,7 +538,7 @@ test('extended inline format', async ({ page }) => {
   // aaab|b|bccc
   await setSelection(page, 2, 4, 2, 5);
   await type(page, 'c');
-  await assertRichTextVirgoDeltas(page, [
+  await assertRichTextInlineDeltas(page, [
     {
       insert: 'aaa',
     },
@@ -663,7 +561,7 @@ test('extended inline format', async ({ page }) => {
   // aaabbb|ccc
   await setSelection(page, 2, 6, 2, 6);
   await type(page, 'c');
-  await assertRichTextVirgoDeltas(page, [
+  await assertRichTextInlineDeltas(page, [
     {
       insert: 'aaa',
     },

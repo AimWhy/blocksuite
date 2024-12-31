@@ -1,10 +1,16 @@
 {
   "entryPoints": [
-    "packages/block-std",
-    "packages/editor",
-    "packages/lit",
-    "packages/store",
-    "packages/virgo"
+    "packages/framework/block-std",
+    "packages/framework/store",
+    "packages/framework/inline",
+    "packages/blocks",
+    "packages/presets",
+    "packages/affine/block-list",
+    "packages/affine/block-paragraph",
+    "packages/affine/block-surface",
+    "packages/affine/components",
+    "packages/affine/model",
+    "packages/affine/shared"
   ],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "packages/docs/api",

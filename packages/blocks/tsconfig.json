@@ -8,19 +8,43 @@
   "include": ["./src"],
   "references": [
     {
-      "path": "../global"
+      "path": "../framework/global"
     },
     {
-      "path": "../store"
+      "path": "../framework/store"
     },
     {
-      "path": "../block-std"
+      "path": "../framework/block-std"
     },
     {
-      "path": "../lit"
+      "path": "../framework/inline"
     },
     {
-      "path": "../virgo"
+      "path": "../affine/model"
+    },
+    {
+      "path": "../affine/shared"
+    },
+    {
+      "path": "../affine/components"
+    },
+    {
+      "path": "../affine/block-paragraph"
+    },
+    {
+      "path": "../affine/block-list"
+    },
+    {
+      "path": "../affine/block-embed"
+    },
+    {
+      "path": "../affine/data-view"
+    },
+    {
+      "path": "../affine/block-surface"
+    },
+    {
+      "path": "../affine/widget-scroll-anchoring"
     }
   ]
 }

@@ -1,6 +1,14 @@
 import { baseTheme } from '@toeverything/theme';
-import { css, html, LitElement, nothing, unsafeCSS } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { cssVarV2 } from '@toeverything/theme/v2';
+import {
+  css,
+  html,
+  LitElement,
+  nothing,
+  type TemplateResult,
+  unsafeCSS,
+} from 'lit';
+import { property, query } from 'lit/decorators.js';
 
 /**
  * Default size is 32px, you can override it by setting `size` property.
@@ -21,7 +29,6 @@ import { customElement, property } from 'lit/decorators.js';
  * </icon-button>`
  * ```
  */
-@customElement('icon-button')
 export class IconButton extends LitElement {
   static override styles = css`
     :host {
@@ -42,8 +49,11 @@ export class IconButton extends LitElement {
       padding: 4px;
     }
 
-    :host(:hover) {
-      background: var(--affine-hover-color);
+    // This media query can detect if the device has a hover capability
+    @media (hover: hover) {
+      :host(:hover) {
+        background: var(--affine-hover-color);
+      }
     }
 
     :host(:active) {
@@ -58,7 +68,7 @@ export class IconButton extends LitElement {
     }
 
     /* You can add a 'hover' attribute to the button to show the hover style */
-    :host([hover]) {
+    :host([hover='true']) {
       background: var(--affine-hover-color);
     }
     :host([hover='false']) {
@@ -74,36 +84,42 @@ export class IconButton extends LitElement {
       display: none;
     }
 
-    :host > .text {
-      flex: 1;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+    :host > .text-container {
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
     }
 
+    :host .text {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: var(--affine-font-sm);
+      line-height: var(--affine-line-height);
+    }
+
+    :host .sub-text {
+      font-size: var(--affine-font-xs);
+      color: var(
+        --light-textColor-textSecondaryColor,
+        var(--textColor-textSecondaryColor, #8e8d91)
+      );
+      line-height: var(--affine-line-height);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      margin-top: -2px;
+    }
+
     ::slotted(svg) {
+      flex-shrink: 0;
       color: var(--svg-icon-color);
     }
+
+    ::slotted([slot='suffix']) {
+      margin-left: auto;
+    }
   `;
-
-  @property()
-  size: string | number | null = null;
-
-  @property()
-  width: string | number | null = null;
-
-  @property()
-  height: string | number | null = null;
-
-  @property()
-  text: string | null = null;
-
-  @property({ attribute: true, type: Boolean })
-  active?: boolean = false;
-
-  // Do not add `{ attribute: false }` option here, otherwise the `disabled` styles will not work
-  @property({ attribute: true, type: Boolean })
-  disabled?: boolean = undefined;
 
   constructor() {
     super();
@@ -133,12 +149,11 @@ export class IconButton extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.tabIndex = 0;
+    this.role = 'button';
 
     const DEFAULT_SIZE = '28px';
     if (this.size && (this.width || this.height)) {
-      throw new Error(
-        'Cannot set both size and width/height on an icon-button'
-      );
+      return;
     }
 
     let width = this.width ?? DEFAULT_SIZE;
@@ -161,22 +176,63 @@ export class IconButton extends LitElement {
   override render() {
     if (this.hidden) return nothing;
     if (this.disabled) {
-      const disabledColor = 'var(--affine-text-disable-color)';
+      const disabledColor = cssVarV2('icon/disable');
       this.style.setProperty('--svg-icon-color', disabledColor);
       this.dataset.testDisabled = 'true';
     } else {
       this.dataset.testDisabled = 'false';
       const iconColor = this.active
-        ? 'var(--affine-primary-color)'
-        : 'var(--affine-icon-color)';
+        ? cssVarV2('icon/activated')
+        : cssVarV2('icon/primary');
       this.style.setProperty('--svg-icon-color', iconColor);
     }
 
-    return html`<slot></slot>${this.text
-        ? // wrap a span around the text so we can ellipsis it automatically
-          html`<span class="text">${this.text}</span>`
-        : ''}<slot name="suffix"></slot>`;
+    const text = this.text
+      ? // wrap a span around the text so we can ellipsis it automatically
+        html`<div class="text">${this.text}</div>`
+      : nothing;
+
+    const subText = this.subText
+      ? html`<div class="sub-text">${this.subText}</div>`
+      : nothing;
+
+    const textContainer =
+      this.text || this.subText
+        ? html`<div class="text-container">${text}${subText}</div>`
+        : nothing;
+
+    return html`<slot></slot>
+      ${textContainer}
+      <slot name="suffix"></slot>`;
   }
+
+  @property({ attribute: true, type: Boolean })
+  accessor active: boolean = false;
+
+  // Do not add `{ attribute: false }` option here, otherwise the `disabled` styles will not work
+  @property({ attribute: true, type: Boolean })
+  accessor disabled: boolean | undefined = undefined;
+
+  @property()
+  accessor height: string | number | null = null;
+
+  @property({ attribute: true, type: String })
+  accessor hover: 'true' | 'false' | undefined = undefined;
+
+  @property()
+  accessor size: string | number | null = null;
+
+  @property()
+  accessor subText: string | TemplateResult<1> | null = null;
+
+  @property()
+  accessor text: string | TemplateResult<1> | null = null;
+
+  @query('.text-container .text')
+  accessor textElement: HTMLDivElement | null = null;
+
+  @property()
+  accessor width: string | number | null = null;
 }
 
 declare global {

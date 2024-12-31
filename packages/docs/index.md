@@ -3,31 +3,31 @@
 layout: home
 
 title: BlockSuite
-titleTemplate: Block-Based Collaborative Editing
+titleTemplate: Content Editing Tech Stack
 
 hero:
   name: BlockSuite
-  text: Where Diverse Editing Tools Converge
-  tagline: BlockSuite is an open-source project for block-based collaborative editing.
+  text: Content Editing Tech Stack for the Web
+  tagline: BlockSuite is a toolkit for building editors and collaborative applications.
   actions:
     - theme: brand
       text: Get Started
-      link: /blocksuite-overview
+      link: /guide/quick-start
     - theme: alt
-      text: Visit Playground
-      link: https://try-blocksuite.vercel.app/starter/?init
+      text: Learn More
+      link: /guide/overview
 
 features:
-  - title: 📝 Document Editor
-    details: The <code>DocEditor</code> is the default editor BlockSuite ships. It's created from our own rich text editing infra, and is open for customizations.
-    link: https://try-blocksuite.vercel.app/starter/?init
-    linkText: Try Online
-  - title: 🎨 Edgeless Editor
-    details: BlockSuite also provides <code>EdgelessEditor</code> with limitless logical canvas size, ideal for virtual whiteboarding and graphic editing.
-    link: https://try-blocksuite.vercel.app
-    linkText: Try Online
-  - title: 🧩 Common Collaborative Framework
-    details: BlockSuite editors are all based on a collaborative block editing framework. Battery included. Framework agnostic.
-    link: /blocksuite-overview
+  - title: 🧩 Headless Editor Framework
+    details: BlockSuite provides a vanilla framework for building various editors, enabling the design of diverse editing interfaces.
+    link: /guide/overview
+    linkText: Learn More
+  - title: 🎨 Extensive Components
+    details: Based on the framework, BlockSuite ships components for building complex editor UIs, which are highly interoperable.
+    link: /components/overview
+    linkText: Learn More
+  - title: 🧬 Collaborative at Core
+    details: Natively powered by CRDT, BlockSuite supports document streaming and conflict resolution at its heart, ready for collaboration inherently.
+    link: /blog/crdt-native-data-flow
     linkText: Learn More
 ---

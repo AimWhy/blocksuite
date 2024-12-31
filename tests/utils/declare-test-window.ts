@@ -1,37 +1,48 @@
-/* eslint-disable @typescript-eslint/no-restricted-imports */
-import type { ContentParser } from '../../packages/blocks/src/content-parser.js';
-import type { TestUtils } from '../../packages/blocks/src/index.js';
-import type { EditorContainer } from '../../packages/editor/src/index.js';
-import type { BlockSuiteRoot } from '../../packages/lit/src/index.js';
-import type { DebugMenu } from '../../packages/playground/apps/starter/components/debug-menu.js';
+import type { RefNodeSlotsProvider, TestUtils } from '@blocks/index.js';
 import type {
-  BaseBlockModel,
-  Page,
-  Workspace,
-} from '../../packages/store/src/index.js';
-import type { DocProvider } from '../../packages/store/src/index.js';
+  EditorHost,
+  ExtensionType,
+  WidgetViewMapIdentifier,
+} from '@blocksuite/block-std';
+import type { AffineEditorContainer } from '@blocksuite/presets';
+import type { StarterDebugMenu } from '@playground/apps/_common/components/starter-debug-menu.js';
+import type { BlockModel, Doc, DocCollection, Job } from '@store/index.js';
 
 declare global {
   interface Window {
-    /** Available on playground window */
+    /** Available on playground window
+     * the following instance are initialized in `packages/playground/apps/starter/main.ts`
+     */
     $blocksuite: {
-      store: typeof import('../../packages/store/src/index.js');
+      store: typeof import('../../packages/framework/store/src/index.js');
       blocks: typeof import('../../packages/blocks/src/index.js');
       global: {
-        utils: typeof import('../../packages/global/src/utils.js');
+        utils: typeof import('../../packages/framework/global/src/utils.js');
       };
-      editor: typeof import('../../packages/editor/src/index.js');
+      editor: typeof import('../../packages/presets/src/index.js');
+      identifiers: {
+        WidgetViewMapIdentifier: typeof WidgetViewMapIdentifier;
+        QuickSearchProvider: typeof import('../../packages/affine/shared/src/services/quick-search-service.js').QuickSearchProvider;
+        DocModeProvider: typeof import('../../packages/affine/shared/src/services/doc-mode-service.js').DocModeProvider;
+        ThemeProvider: typeof import('../../packages/affine/shared/src/services/theme-service.js').ThemeProvider;
+        RefNodeSlotsProvider: typeof RefNodeSlotsProvider;
+        ParseDocUrlService: typeof import('../../packages/affine/shared/src/services/parse-url-service.js').ParseDocUrlProvider;
+      };
+      defaultExtensions: () => ExtensionType[];
+      extensions: {
+        WidgetViewMapExtension: typeof import('../../packages/framework/block-std/src/extension/widget-view-map.js').WidgetViewMapExtension;
+      };
+      mockServices: {
+        mockDocModeService: typeof import('../../packages/playground/apps/_common/mock-services.js').mockDocModeService;
+      };
     };
-    workspace: Workspace;
-    ContentParser: typeof ContentParser;
-    blockSchema: Record<string, typeof BaseBlockModel>;
-    page: Page;
-    debugMenu: DebugMenu;
-    editor: EditorContainer;
-    root: BlockSuiteRoot;
+    collection: DocCollection;
+    blockSchema: Record<string, typeof BlockModel>;
+    doc: Doc;
+    debugMenu: StarterDebugMenu;
+    editor: AffineEditorContainer;
+    host: EditorHost;
     testUtils: TestUtils;
-
-    // TODO: remove this when provider support subdocument
-    subdocProviders: Map<string, DocProvider[]>;
+    job: Job;
   }
 }

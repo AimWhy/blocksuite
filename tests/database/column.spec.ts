@@ -7,6 +7,10 @@ import {
   getBoundingBox,
   initDatabaseDynamicRowWithData,
   initEmptyDatabaseState,
+  pressArrowRight,
+  pressArrowUp,
+  pressArrowUpWithShiftKey,
+  pressBackspace,
   pressEnter,
   pressEscape,
   redoByClick,
@@ -20,6 +24,7 @@ import {
   assertDatabaseCellNumber,
   assertDatabaseCellRichTexts,
   assertSelectedStyle,
+  changeColumnType,
   clickDatabaseOutside,
   clickSelectOption,
   getDatabaseHeaderColumn,
@@ -40,6 +45,8 @@ test.describe('column operations', () => {
     const { textElement } = await getDatabaseHeaderColumn(page, 1);
     expect(await textElement.innerText()).toBe('abc');
     await textElement.click();
+    await waitNextFrame(page, 200);
+    await pressArrowRight(page);
     await type(page, '123');
     await pressEnter(page);
     expect(await textElement.innerText()).toBe('abc123');
@@ -172,6 +179,8 @@ test.describe('column operations', () => {
     await column.click();
     const moveLeft = page.locator('.action', { hasText: 'Move left' });
     expect(await moveLeft.count()).toBe(0);
+    await waitNextFrame(page, 200);
+    await pressEscape(page);
     await pressEscape(page);
 
     await performColumnAction(page, '2', 'Move left');
@@ -187,14 +196,15 @@ test.describe('switch column type', () => {
     await initDatabaseColumn(page);
     await initDatabaseDynamicRowWithData(page, '123abc', true);
     await pressEscape(page);
-    await switchColumnType(page, 'Number');
+    await changeColumnType(page, 1, 'Number');
 
     const cell = getFirstColumnCell(page, 'number');
     await assertDatabaseCellNumber(page, {
       text: '',
     });
-
-    await initDatabaseDynamicRowWithData(page, '123abc');
+    await pressEnter(page);
+    await type(page, '123abc');
+    await pressEscape(page);
     expect((await cell.textContent())?.trim()).toBe('123');
   });
 
@@ -211,9 +221,12 @@ test.describe('switch column type', () => {
     // Therefore, for the time being, here is to detect whether there is '.affine-database-rich-text'
     const cell = getFirstColumnCell(page, 'affine-database-rich-text');
     expect(await cell.count()).toBe(1);
-
-    await initDatabaseDynamicRowWithData(page, '123');
-    await initDatabaseDynamicRowWithData(page, 'abc');
+    await pressEnter(page);
+    await type(page, '123');
+    await pressEscape(page);
+    await pressEnter(page);
+    await type(page, 'abc');
+    await pressEscape(page);
     await assertDatabaseCellRichTexts(page, { text: '123abc123abc' });
   });
 
@@ -223,8 +236,8 @@ test.describe('switch column type', () => {
 
     await initDatabaseColumn(page);
     await initDatabaseDynamicRowWithData(page, '123', true);
-    await pressEscape(page);
-    await initDatabaseDynamicRowWithData(page, 'abc');
+    await type(page, 'abc');
+    await pressEnter(page);
     await pressEscape(page);
     const cell = getFirstColumnCell(page, 'select-selected');
     expect(await cell.count()).toBe(2);
@@ -233,12 +246,15 @@ test.describe('switch column type', () => {
     expect(await cell.count()).toBe(1);
     expect(await cell.innerText()).toBe('123');
 
-    await initDatabaseDynamicRowWithData(page, 'def');
-    await pressEscape(page);
+    await pressEnter(page);
+    await type(page, 'def');
+    await pressEnter(page);
     expect(await cell.innerText()).toBe('def');
 
     await switchColumnType(page, 'Multi-select');
-    await initDatabaseDynamicRowWithData(page, '666');
+    await pressEnter(page);
+    await type(page, '666');
+    await pressEnter(page);
     await pressEscape(page);
     expect(await cell.count()).toBe(2);
     expect(await cell.nth(0).innerText()).toBe('def');
@@ -248,8 +264,9 @@ test.describe('switch column type', () => {
     expect(await cell.count()).toBe(1);
     expect(await cell.innerText()).toBe('def');
 
-    await initDatabaseDynamicRowWithData(page, '888');
-    await pressEscape(page);
+    await pressEnter(page);
+    await type(page, '888');
+    await pressEnter(page);
     expect(await cell.innerText()).toBe('888');
   });
 
@@ -261,22 +278,19 @@ test.describe('switch column type', () => {
     await switchColumnType(page, 'Number');
 
     await initDatabaseDynamicRowWithData(page, '123abc', true);
-    await pressEscape(page);
-    getFirstColumnCell(page, 'Number');
-    await pressEnter(page);
-    await clickDatabaseOutside(page);
-    await waitNextFrame(page, 100);
     await assertDatabaseCellNumber(page, {
       text: '123',
     });
 
     await switchColumnType(page, 'Text');
-    await initDatabaseDynamicRowWithData(page, 'abc');
+    await pressEnter(page);
+    await type(page, 'abc');
+    await pressEscape(page);
     await assertDatabaseCellRichTexts(page, { text: '123abc' });
 
     await switchColumnType(page, 'Number');
     await assertDatabaseCellNumber(page, {
-      text: '',
+      text: '123',
     });
   });
 
@@ -309,7 +323,7 @@ test.describe('switch column type', () => {
     await initDatabaseColumn(page);
     await initDatabaseDynamicRowWithData(page, '', true);
     await pressEscape(page);
-    await switchColumnType(page, 'Checkbox');
+    await changeColumnType(page, 1, 'Checkbox');
 
     const checkbox = getFirstColumnCell(page, 'checkbox');
     await expect(checkbox).not.toHaveClass('checked');
@@ -319,6 +333,43 @@ test.describe('switch column type', () => {
     await expect(checkbox).toHaveClass(/checked/);
 
     await undoByClick(page);
+    await expect(checkbox).not.toHaveClass('checked');
+  });
+
+  test('checkbox to text', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await initDatabaseDynamicRowWithData(page, '', true);
+    await pressEscape(page);
+    await changeColumnType(page, 1, 'Checkbox');
+
+    let checkbox = getFirstColumnCell(page, 'checkbox');
+    await expect(checkbox).not.toHaveClass('checked');
+
+    // checked
+    await checkbox.click();
+    await changeColumnType(page, 1, 'Text');
+    await clickDatabaseOutside(page);
+    await waitNextFrame(page, 100);
+    await assertDatabaseCellRichTexts(page, { text: 'Yes' });
+    await clickDatabaseOutside(page);
+    await waitNextFrame(page, 100);
+    await changeColumnType(page, 1, 'Checkbox');
+    checkbox = getFirstColumnCell(page, 'checkbox');
+    await expect(checkbox).toHaveClass(/checked/);
+
+    // not checked
+    await checkbox.click();
+    await changeColumnType(page, 1, 'Text');
+    await clickDatabaseOutside(page);
+    await waitNextFrame(page, 100);
+    await assertDatabaseCellRichTexts(page, { text: 'No' });
+    await clickDatabaseOutside(page);
+    await waitNextFrame(page, 100);
+    await changeColumnType(page, 1, 'Checkbox');
+    checkbox = getFirstColumnCell(page, 'checkbox');
     await expect(checkbox).not.toHaveClass('checked');
   });
 
@@ -377,7 +428,9 @@ test.describe('switch column type', () => {
 
     const linkText = 'http://example.com';
     const cell = getFirstColumnCell(page, 'affine-database-link');
-    await initDatabaseDynamicRowWithData(page, linkText);
+    await pressEnter(page);
+    await type(page, linkText);
+    await pressEscape(page);
     const link = cell.locator('affine-database-link-node > a');
     const linkContent = link.locator('.link-node-text');
     await expect(link).toHaveAttribute('href', linkText);
@@ -385,7 +438,7 @@ test.describe('switch column type', () => {
 
     // not link text
     await cell.hover();
-    const linkEdit = cell.locator('.affine-database-link-icon');
+    const linkEdit = getFirstColumnCell(page, 'affine-database-link-icon');
     await linkEdit.click();
     await selectAllByKeyboard(page);
     await type(page, 'abc');
@@ -405,9 +458,10 @@ test.describe('select column tag action', () => {
     await pressEnter(page);
     await clickSelectOption(page);
     await waitNextFrame(page);
+    await pressArrowRight(page);
     await type(page, '4567abc00');
     await pressEnter(page);
-    const options = page.locator('.select-option-name');
+    const options = page.locator('.select-options-container .tag-text');
     expect(await options.nth(0).innerText()).toBe('abc4567abc00');
     expect(await options.nth(1).innerText()).toBe('123');
   });
@@ -420,18 +474,13 @@ test.describe('select column tag action', () => {
     await initDatabaseDynamicRowWithData(page, '123', true);
     await clickSelectOption(page);
     await waitNextFrame(page);
+    await pressArrowRight(page);
     await type(page, '456');
     // esc
     await pressEscape(page);
-    const options = page.locator('.select-option-name');
+    await pressEscape(page);
+    const options = page.locator('.select-options-container .tag-text');
     const option1 = options.nth(0);
-    expect(await option1.innerText()).toBe('123');
-
-    await clickSelectOption(page);
-    await waitNextFrame(page);
-    await type(page, '456');
-    // enter
-    await pressEnter(page);
     expect(await option1.innerText()).toBe('123456');
   });
 
@@ -454,6 +503,97 @@ test.describe('select column tag action', () => {
     await initDatabaseDynamicRowWithData(page, '123', true);
     await performSelectColumnTagAction(page, 'Red');
     await pressEscape(page);
-    await assertSelectedStyle(page, 'backgroundColor', 'var(--affine-tag-red)');
+    await assertSelectedStyle(
+      page,
+      'backgroundColor',
+      'var(--affine-v2-chip-label-red)'
+    );
+  });
+});
+
+test.describe('drag-to-fill', () => {
+  test('should show when cell in focus and hide on blur', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await initDatabaseDynamicRowWithData(page, '', true);
+
+    await pressEscape(page);
+
+    const dragToFillHandle = page.locator('.drag-to-fill');
+
+    await expect(dragToFillHandle).toBeVisible();
+
+    await pressEscape(page);
+
+    await expect(dragToFillHandle).toBeHidden();
+  });
+
+  test('should not show in multi (row or column) selection', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+
+    await initDatabaseDynamicRowWithData(page, '', true);
+    await pressEscape(page);
+
+    await initDatabaseDynamicRowWithData(page, '', true);
+    await pressEscape(page);
+
+    const dragToFillHandle = page.locator('.drag-to-fill');
+
+    await expect(dragToFillHandle).toBeVisible();
+
+    await pressArrowUpWithShiftKey(page);
+
+    await expect(dragToFillHandle).toBeHidden();
+    await pressArrowUp(page);
+
+    await expect(dragToFillHandle).toBeVisible();
+  });
+
+  test('should fill columns with data', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+
+    await initDatabaseDynamicRowWithData(page, 'thing', true);
+    await pressEscape(page);
+
+    await initDatabaseDynamicRowWithData(page, '', true);
+    await pressBackspace(page);
+    await type(page, 'aaa');
+    await pressEnter(page);
+    await pressEnter(page);
+
+    await pressEscape(page);
+    await pressArrowUp(page);
+
+    const cells = page.locator('affine-database-multi-select-cell');
+
+    expect(await cells.nth(0).innerText()).toBe('thing');
+    expect(await cells.nth(1).innerText()).toBe('aaa');
+
+    const dragToFillHandle = page.locator('.drag-to-fill');
+
+    await expect(dragToFillHandle).toBeVisible();
+
+    const bbox = await getBoundingBox(dragToFillHandle);
+
+    if (!bbox) throw new Error('Expected a bounding box');
+
+    await dragBetweenCoords(
+      page,
+      { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 },
+      { x: bbox.x, y: bbox.y + 200 }
+    );
+
+    expect(await cells.nth(0).innerText()).toBe('thing');
+    expect(await cells.nth(1).innerText()).toBe('thing');
   });
 });

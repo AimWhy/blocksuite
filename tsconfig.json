@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
     "jsx": "react",
-    "target": "ES2020",
+    "target": "ES2022",
     "useDefineForClassFields": false,
-    "experimentalDecorators": true,
     "module": "NodeNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "moduleResolution": "NodeNext",
     "strict": true,
     "sourceMap": true,
+    "inlineSources": true,
     "declaration": true,
     "declarationMap": true,
     "resolveJsonModule": true,
@@ -21,39 +21,30 @@
     "noImplicitOverride": true,
     "skipLibCheck": true,
     "incremental": true,
-    "composite": true,
-    "plugins": [
-      {
-        "name": "ts-lit-plugin",
-        "strict": true,
-        "rules": {
-          "no-incompatible-type-binding": "off"
-        }
-      }
-    ]
+    "composite": true
   },
   "files": [],
   "references": [
     {
-      "path": "./packages/block-std"
+      "path": "./packages/framework/block-std"
     },
     {
       "path": "./packages/blocks"
     },
     {
-      "path": "./packages/editor"
+      "path": "./packages/presets"
     },
     {
       "path": "./packages/playground"
     },
     {
-      "path": "./packages/store"
+      "path": "./packages/framework/store"
     },
     {
-      "path": "./packages/global"
+      "path": "./packages/framework/global"
     },
     {
-      "path": "./packages/virgo"
+      "path": "./packages/framework/inline"
     },
     {
       "path": "./tests"

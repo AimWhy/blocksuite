@@ -1,123 +1,93 @@
-/// <reference types="vite/client" />
-import { BlockElement } from '@blocksuite/lit';
-import { html, nothing } from 'lit';
-import { customElement, query, state } from 'lit/decorators.js';
+import type { FrameBlockModel } from '@blocksuite/affine-model';
+
+import { ThemeProvider } from '@blocksuite/affine-shared/services';
+import { GfxBlockComponent } from '@blocksuite/block-std';
+import { Bound } from '@blocksuite/global/utils';
+import { cssVarV2 } from '@toeverything/theme/v2';
+import { html } from 'lit';
+import { state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
-import { isCssVariable } from '../_common/theme/css-variables.js';
-import { Bound } from '../surface-block/index.js';
-import type { FrameBlockModel } from './frame-model.js';
+import type { EdgelessRootService } from '../root-block/index.js';
 
-@customElement('affine-frame')
-export class FrameBlockComponent extends BlockElement<FrameBlockModel> {
-  static offset = 12;
-
-  @state()
-  showTitle = true;
-
-  @state()
-  private _isNavigator = false;
-
-  @query('.affine-frame-title')
-  private _titleElement?: HTMLElement;
-
-  get titleBound() {
-    if (!this._titleElement) return new Bound();
-    const { viewport } = this.surface;
-    const { zoom } = viewport;
-    const rect = viewport.boundingClientRect;
-    const bound = Bound.fromDOMRect(this._titleElement.getBoundingClientRect());
-    bound.x -= rect.x;
-    bound.y -= rect.y;
-    bound.h += FrameBlockComponent.offset;
-    bound.h /= zoom;
-    bound.w /= zoom;
-    const [x, y] = viewport.toModelCoord(bound.x, bound.y);
-    bound.x = x;
-    bound.y = y;
-    return bound;
-  }
-
-  get surface() {
-    return this.closest('affine-edgeless-page')!.surface;
+export class FrameBlockComponent extends GfxBlockComponent<FrameBlockModel> {
+  get rootService() {
+    return this.std.getService('affine:page') as EdgelessRootService;
   }
 
   override connectedCallback() {
     super.connectedCallback();
-    let lastZoom = 0;
+
     this._disposables.add(
-      this.surface.viewport.slots.viewportUpdated.on(({ zoom }) => {
-        if (zoom !== lastZoom) {
+      this.doc.slots.blockUpdated.on(({ type, id }) => {
+        if (id === this.model.id && type === 'update') {
           this.requestUpdate();
-          lastZoom = zoom;
         }
       })
     );
-
     this._disposables.add(
-      this.surface.edgeless.slots.elementUpdated.on(() => {
+      this.gfx.viewport.viewportUpdated.on(() => {
         this.requestUpdate();
       })
     );
   }
 
-  override createRenderRoot() {
-    return this;
+  /**
+   * Due to potentially very large frame sizes, CSS scaling can cause iOS Safari to crash.
+   * To mitigate this issue, we combine size calculations within the rendering rect.
+   */
+  override getCSSTransform(): string {
+    return '';
   }
 
-  override firstUpdated() {
-    this.surface.edgeless.slots.edgelessToolUpdated.on(tool => {
-      this._isNavigator = tool.type === 'frameNavigator' ? true : false;
-    });
+  override getRenderingRect() {
+    const viewport = this.gfx.viewport;
+    const { translateX, translateY, zoom } = viewport;
+    const { xywh, rotate } = this.model;
+    const bound = Bound.deserialize(xywh);
+
+    const scaledX = bound.x * zoom + translateX;
+    const scaledY = bound.y * zoom + translateY;
+
+    return {
+      x: scaledX,
+      y: scaledY,
+      w: bound.w * zoom,
+      h: bound.h * zoom,
+      rotate,
+      zIndex: this.toZIndex(),
+    };
   }
 
-  override render() {
-    const { model, showTitle, surface, _isNavigator } = this;
-    const bound = Bound.deserialize(
-      (surface.edgeless.localRecord.wrap(model) as FrameBlockModel).xywh
-    );
-    const { zoom } = surface.viewport;
-    const text = model.title.toString();
+  override renderGfxBlock() {
+    const { model, showBorder, rootService, std } = this;
+    const backgroundColor = std
+      .get(ThemeProvider)
+      .generateColorProperty(model.background, '--affine-platte-transparent');
+    const _isNavigator =
+      this.gfx.tool.currentToolName$.value === 'frameNavigator';
+    const frameIndex = rootService.layer.getZIndex(model);
 
     return html`
-      ${showTitle && !_isNavigator
-        ? html` <div
-            style=${styleMap({
-              transformOrigin: 'top left',
-              transform: `scale(${1 / zoom})`,
-              borderRadius: '4px',
-              width: 'fit-content',
-              maxWidth: bound.w * zoom + 'px',
-              padding: '4px 10px',
-              fontSize: '14px',
-              position: 'absolute',
-              background: 'var(--affine-text-primary-color)',
-              color: 'var(--affine-white)',
-              cursor: 'default',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              top: -(24.36 + FrameBlockComponent.offset) / zoom + 'px',
-            })}
-            class="affine-frame-title"
-          >
-            ${text}
-          </div>`
-        : nothing}
       <div
         class="affine-frame-container"
         style=${styleMap({
-          width: bound.w + 'px',
-          height: bound.h + 'px',
-          backgroundColor: isCssVariable(model.background)
-            ? `var(${model.background})`
-            : '',
-          borderRadius: '8px',
-          border: _isNavigator ? 'none' : `2px solid var(--affine-black-30)`,
+          zIndex: `${frameIndex}`,
+          backgroundColor,
+          height: '100%',
+          width: '100%',
+          borderRadius: '2px',
+          border:
+            _isNavigator || !showBorder
+              ? 'none'
+              : `1px solid ${cssVarV2('edgeless/frame/border/default')}`,
         })}
       ></div>
     `;
   }
+
+  @state()
+  accessor showBorder = true;
 }
 
 declare global {

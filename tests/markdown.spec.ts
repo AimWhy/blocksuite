@@ -16,9 +16,9 @@ import {
 } from './utils/actions/index.js';
 import {
   assertBlockType,
+  assertRichTextInlineDeltas,
+  assertRichTextInlineRange,
   assertRichTexts,
-  assertRichTextVirgoDeltas,
-  assertRichTextVRange,
   assertText,
 } from './utils/asserts.js';
 import { test } from './utils/playwright.js';
@@ -33,8 +33,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '[] ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'todo');
   await undoByClick(page);
   await assertText(page, '[] ');
@@ -45,8 +45,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '[ ] ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'todo');
   await undoByClick(page);
   await assertText(page, '[ ] ');
@@ -57,8 +57,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '[x] ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'todo');
   await undoByClick(page);
   await assertText(page, '[x] ');
@@ -67,8 +67,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '* ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'bulleted');
   await undoByClick(page);
   await assertText(page, '* ');
@@ -77,8 +77,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '- ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'bulleted');
   await undoByClick(page);
   await assertText(page, '- ');
@@ -87,8 +87,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '1. ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'numbered');
   await undoByClick(page);
   await assertText(page, '1. ');
@@ -97,8 +97,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '20. ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'numbered');
   await undoByClick(page);
   await assertText(page, '20. ');
@@ -107,8 +107,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '# ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h1');
   await undoByClick(page);
   await assertText(page, '# ');
@@ -117,8 +117,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '## ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h2');
   await undoByClick(page);
   await assertText(page, '## ');
@@ -127,8 +127,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '### ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h3');
   await undoByClick(page);
   await assertText(page, '### ');
@@ -137,8 +137,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '#### ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h4');
   await undoByClick(page);
   await assertText(page, '#### ');
@@ -147,8 +147,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '##### ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h5');
   await undoByClick(page);
   await assertText(page, '##### ');
@@ -157,8 +157,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '###### ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'h6');
   await undoByClick(page);
   await assertText(page, '###### ');
@@ -167,8 +167,8 @@ test('markdown shortcut', async ({ page }) => {
 
   await waitNextFrame(page);
   await type(page, '> ');
-  [id] = await getCursorBlockIdAndHeight(page);
   await waitNextFrame(page);
+  [id] = await getCursorBlockIdAndHeight(page);
   await assertBlockType(page, id, 'quote');
   await undoByClick(page);
   await assertText(page, '> ');
@@ -189,7 +189,7 @@ test('markdown shortcut', async ({ page }) => {
   await assertRichTexts(page, ['']);
 });
 
-test.describe('markdown inline-text', async () => {
+test.describe('markdown inline-text', () => {
   test.beforeEach(async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
@@ -199,7 +199,7 @@ test.describe('markdown inline-text', async () => {
 
   test('bolditalic', async ({ page }) => {
     await type(page, 'aa***bb*** ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -212,15 +212,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 11);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 11);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa***bb*** ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -253,7 +253,7 @@ test.describe('markdown inline-text', async () => {
 
   test('bold', async ({ page }) => {
     await type(page, 'aa**bb** ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -265,15 +265,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 9);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 9);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa**bb** ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -304,7 +304,7 @@ test.describe('markdown inline-text', async () => {
 
   test('italic', async ({ page }) => {
     await type(page, 'aa*bb* ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -316,15 +316,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 7);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 7);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa*bb* ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -356,7 +356,7 @@ test.describe('markdown inline-text', async () => {
 
   test('strike', async ({ page }) => {
     await type(page, 'aa~~bb~~ ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -368,15 +368,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 9);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 9);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa~~bb~~ ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -407,7 +407,7 @@ test.describe('markdown inline-text', async () => {
 
   test('underline', async ({ page }) => {
     await type(page, 'aa~bb~ ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -419,15 +419,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 7);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 7);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa~bb~ ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -458,7 +458,7 @@ test.describe('markdown inline-text', async () => {
 
   test('code', async ({ page }) => {
     await type(page, 'aa`bb` ');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },
@@ -470,15 +470,15 @@ test.describe('markdown inline-text', async () => {
       },
     ]);
     await undoByKeyboard(page);
-    await assertRichTextVRange(page, 0, 7);
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineRange(page, 0, 7);
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa`bb` ',
       },
     ]);
     await redoByKeyboard(page);
     await type(page, 'cc');
-    await assertRichTextVirgoDeltas(page, [
+    await assertRichTextInlineDeltas(page, [
       {
         insert: 'aa',
       },

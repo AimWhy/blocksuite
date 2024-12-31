@@ -1,10 +1,9 @@
-import type { BaseBlockModel } from '@blocksuite/store';
+import type { BlockModel } from '@blocksuite/store';
+
+import { BLOCK_ID_ATTR } from '@blocksuite/block-std';
 import { css, html, LitElement } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { property } from 'lit/decorators.js';
 
-import { BLOCK_ID_ATTR, BLOCK_SERVICE_LOADING_ATTR } from '../consts.js';
-
-@customElement('loader-element')
 export class Loader extends LitElement {
   static override styles = css`
     .load-container {
@@ -60,15 +59,6 @@ export class Loader extends LitElement {
     }
   `;
 
-  @property({ attribute: false })
-  hostModel: BaseBlockModel | null = null;
-
-  @property({ attribute: false })
-  radius: string | number = '8px';
-
-  @property({ attribute: false })
-  width: string | number = '150px';
-
   constructor() {
     super();
   }
@@ -77,7 +67,7 @@ export class Loader extends LitElement {
     super.connectedCallback();
     if (this.hostModel) {
       this.setAttribute(BLOCK_ID_ATTR, this.hostModel.id);
-      this.setAttribute(BLOCK_SERVICE_LOADING_ATTR, 'true');
+      this.dataset.serviceLoading = 'true';
     }
 
     const width = this.width;
@@ -96,6 +86,15 @@ export class Loader extends LitElement {
       </div>
     `;
   }
+
+  @property({ attribute: false })
+  accessor hostModel: BlockModel | null = null;
+
+  @property({ attribute: false })
+  accessor radius: string | number = '8px';
+
+  @property({ attribute: false })
+  accessor width: string | number = '150px';
 }
 
 declare global {

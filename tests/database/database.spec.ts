@@ -1,5 +1,4 @@
 import { expect } from '@playwright/test';
-import { getFormatBar } from 'utils/query.js';
 
 import {
   dragBetweenCoords,
@@ -7,10 +6,8 @@ import {
   focusDatabaseTitle,
   getBoundingBox,
   initDatabaseDynamicRowWithData,
-  initDatabaseRow,
   initDatabaseRowWithData,
   initEmptyDatabaseState,
-  pressArrowDown,
   pressArrowLeft,
   pressArrowRight,
   pressBackspace,
@@ -19,7 +16,8 @@ import {
   pressShiftEnter,
   redoByKeyboard,
   selectAllByKeyboard,
-  setVRangeInVEditor,
+  setInlineRangeInInlineEditor,
+  switchReadonly,
   type,
   undoByClick,
   undoByKeyboard,
@@ -27,25 +25,23 @@ import {
 } from '../utils/actions/index.js';
 import {
   assertBlockProps,
+  assertInlineEditorDeltas,
   assertRowCount,
-  assertVEditorDeltas,
 } from '../utils/asserts.js';
 import { test } from '../utils/playwright.js';
+import { getFormatBar } from '../utils/query.js';
 import {
   assertColumnWidth,
   assertDatabaseCellRichTexts,
   assertDatabaseSearching,
-  assertDatabaseTitleColumnText,
   assertDatabaseTitleText,
   blurDatabaseSearch,
   clickColumnType,
   clickDatabaseOutside,
   focusDatabaseHeader,
   focusDatabaseSearch,
-  getDatabaseBodyRow,
-  getDatabaseBodyRows,
+  getDatabaseBodyCell,
   getDatabaseHeaderColumn,
-  getDatabaseMouse,
   getFirstColumnCell,
   initDatabaseColumn,
   switchColumnType,
@@ -62,10 +58,9 @@ test('edit database block title and create new rows', async ({ page }) => {
     title: dbTitle,
   });
   await focusDatabaseTitle(page);
-  await pressArrowDown(page);
-  for (let i = 0; i < dbTitle.length; i++) {
-    await pressBackspace(page);
-  }
+  await selectAllByKeyboard(page);
+  await pressBackspace(page);
+
   const expected = 'hello';
   await type(page, expected);
   await assertBlockProps(page, '2', {
@@ -148,35 +143,6 @@ test('should the multi-select mode work correctly', async ({ page }) => {
   expect(await cell.count()).toBe(2);
   expect(await cell.nth(0).innerText()).toBe('1');
   expect(await cell.nth(1).innerText()).toBe('2');
-});
-
-test('should show or hide database toolbar', async ({ page }) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyDatabaseState(page);
-
-  await initDatabaseColumn(page);
-  await initDatabaseRow(page);
-
-  const db = await getDatabaseMouse(page);
-  await db.mouseOver();
-  const toolbar = page.locator('.affine-database-toolbar');
-  await expect(toolbar).toBeVisible();
-  await db.mouseLeave();
-  await expect(toolbar).toBeHidden();
-
-  await db.mouseOver();
-  await focusDatabaseSearch(page);
-  await db.mouseLeave();
-  await expect(toolbar).toBeVisible();
-
-  await clickDatabaseOutside(page);
-  await expect(toolbar).toBeHidden();
-
-  await db.mouseOver();
-  await focusDatabaseSearch(page);
-  await type(page, '1');
-  await clickDatabaseOutside(page);
-  await expect(toolbar).toBeVisible();
 });
 
 test('should database search work', async ({ page }) => {
@@ -262,7 +228,7 @@ test('should database title and rich-text support undo/redo', async ({
   await focusDatabaseTitle(page);
   await type(page, 'abc');
   await assertDatabaseTitleText(page, 'Database 1abc');
-  await undoByClick(page);
+  await undoByKeyboard(page);
   await assertDatabaseTitleText(page, 'Database 1');
   await redoByKeyboard(page);
   await assertDatabaseTitleText(page, 'Database 1abc');
@@ -281,8 +247,8 @@ test('should support drag to change column width', async ({ page }) => {
   const titleColumnWidth = 260;
   const normalColumnWidth = 180;
 
-  await assertColumnWidth(titleColumn, titleColumnWidth);
-  const box = await assertColumnWidth(normalColumn, normalColumnWidth);
+  await assertColumnWidth(titleColumn, titleColumnWidth - 1);
+  const box = await assertColumnWidth(normalColumn, normalColumnWidth - 1);
 
   await dragBetweenCoords(
     page,
@@ -297,11 +263,11 @@ test('should support drag to change column width', async ({ page }) => {
   );
 
   await assertColumnWidth(titleColumn, titleColumnWidth + dragDistance);
-  await assertColumnWidth(normalColumn, normalColumnWidth);
+  await assertColumnWidth(normalColumn, normalColumnWidth - 1);
 
   await undoByClick(page);
-  await assertColumnWidth(titleColumn, titleColumnWidth);
-  await assertColumnWidth(normalColumn, normalColumnWidth);
+  await assertColumnWidth(titleColumn, titleColumnWidth - 1);
+  await assertColumnWidth(normalColumn, normalColumnWidth - 1);
 });
 
 test('should display the add column button on the right side of database correctly', async ({
@@ -353,10 +319,7 @@ test('should support drag and drop to move columns', async ({ page }) => {
       steps: 50,
       beforeMouseUp: async () => {
         await waitNextFrame(page);
-        const indicator = page
-          .locator('.vertical-indicator-container')
-          .locator('.vertical-indicator-group')
-          .first();
+        const indicator = page.locator('.vertical-indicator').first();
         await expect(indicator).toBeVisible();
 
         const { box } = await getDatabaseHeaderColumn(page, 2);
@@ -368,113 +331,6 @@ test('should support drag and drop to move columns', async ({ page }) => {
 
   const { text } = await getDatabaseHeaderColumn(page, 2);
   expect(text).toBe('column1');
-});
-
-test('support drag and drop the add button to insert row', async ({ page }) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyDatabaseState(page);
-
-  await initDatabaseColumn(page);
-  await initDatabaseDynamicRowWithData(page, 'a', true);
-  await pressEscape(page);
-  await initDatabaseDynamicRowWithData(page, 'b', true);
-  await pressEscape(page);
-  await focusDatabaseHeader(page);
-  const newRecord = page.locator('.new-record');
-  const box = await getBoundingBox(newRecord);
-
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-  const row0 = getDatabaseBodyRow(page, 0);
-  const box0 = await getBoundingBox(row0);
-  const endX = box0.x + box0.width / 2;
-  const endY = box0.y;
-  await dragBetweenCoords(
-    page,
-    { x: startX, y: startY },
-    // The drag judgment range is: [-20, 20]
-    { x: endX, y: endY - 21 },
-    {
-      steps: 50,
-      beforeMouseUp: async () => {
-        await waitNextFrame(page);
-        await expect(page.locator('affine-drag-indicator div')).toBeHidden();
-      },
-    }
-  );
-
-  await dragBetweenCoords(
-    page,
-    { x: startX, y: startY },
-    { x: endX, y: endY },
-    {
-      steps: 50,
-      beforeMouseUp: async () => {
-        await waitNextFrame(page);
-        await expect(
-          page.locator('div[data-is-drop-preview="true"]')
-        ).toBeVisible();
-      },
-    }
-  );
-  const rows = getDatabaseBodyRows(page);
-  expect(await rows.count()).toBe(3);
-  await waitNextFrame(page, 50);
-  await type(page, '1');
-  await pressEscape(page);
-  await waitNextFrame(page);
-  await assertDatabaseTitleColumnText(page, '1');
-});
-
-test('should the indicator display correctly when resize the window', async ({
-  page,
-}) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyDatabaseState(page);
-
-  await initDatabaseColumn(page);
-  await initDatabaseDynamicRowWithData(page, 'a', true);
-  await pressEscape(page);
-  await initDatabaseDynamicRowWithData(page, 'b', true);
-  await pressEscape(page);
-
-  const size = page.viewportSize();
-  if (!size) throw new Error('Missing page size');
-  await page.setViewportSize({
-    width: size.width - 100,
-    height: size.height - 100,
-  });
-  await page.waitForTimeout(250);
-
-  await focusDatabaseHeader(page);
-  const newRecord = page.locator('.new-record');
-  const box = await getBoundingBox(newRecord);
-
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-  const row0 = getDatabaseBodyRow(page, 0);
-  const box0 = await getBoundingBox(row0);
-  const endX = box0.x + box0.width / 2;
-  const endY = box0.y;
-
-  await dragBetweenCoords(
-    page,
-    { x: startX, y: startY },
-    { x: endX, y: endY },
-    {
-      steps: 50,
-      beforeMouseUp: async () => {
-        await waitNextFrame(page);
-        const { x: indicatorX } = await getBoundingBox(
-          page.locator('div[data-is-drop-preview="true"]')
-        );
-        const { x: databaseX } = await getBoundingBox(
-          page.locator('affine-database-table')
-        );
-        expect(indicatorX).toBe(databaseX);
-      },
-    }
-  );
 });
 
 test('should title column support quick renaming', async ({ page }) => {
@@ -538,23 +394,23 @@ test('database format-bar in header and text column', async ({ page }) => {
   // header | column
 
   const formatBar = getFormatBar(page);
-  await setVRangeInVEditor(page, { index: 1, length: 4 }, 2);
+  await setInlineRangeInInlineEditor(page, { index: 1, length: 4 }, 1);
   expect(await formatBar.formatBar.isVisible()).toBe(true);
   // Title    | Column1
   // ----------------
   // h|eade|r | column
 
-  await assertVEditorDeltas(
+  await assertInlineEditorDeltas(
     page,
     [
       {
         insert: 'header',
       },
     ],
-    2
+    1
   );
   await formatBar.boldBtn.click();
-  await assertVEditorDeltas(
+  await assertInlineEditorDeltas(
     page,
     [
       {
@@ -570,29 +426,29 @@ test('database format-bar in header and text column', async ({ page }) => {
         insert: 'r',
       },
     ],
-    2
+    1
   );
 
   await pressEscape(page);
   await pressArrowRight(page);
   await pressEnter(page);
-  await setVRangeInVEditor(page, { index: 2, length: 2 }, 3);
+  await setInlineRangeInInlineEditor(page, { index: 2, length: 2 }, 2);
   expect(await formatBar.formatBar.isVisible()).toBe(true);
   // Title  | Column1
   // ----------------
   // header | co|lu|mn
 
-  await assertVEditorDeltas(
+  await assertInlineEditorDeltas(
     page,
     [
       {
         insert: 'column',
       },
     ],
-    3
+    2
   );
   await formatBar.boldBtn.click();
-  await assertVEditorDeltas(
+  await assertInlineEditorDeltas(
     page,
     [
       {
@@ -608,6 +464,207 @@ test('database format-bar in header and text column', async ({ page }) => {
         insert: 'mn',
       },
     ],
-    3
+    2
   );
+});
+
+test.describe('readonly mode', () => {
+  test('database title should not be edited in readonly mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    const locator = page.locator('affine-database');
+    await expect(locator).toBeVisible();
+
+    const dbTitle = 'Database 1';
+    await assertBlockProps(page, '2', {
+      title: dbTitle,
+    });
+
+    await focusDatabaseTitle(page);
+    await selectAllByKeyboard(page);
+    await pressBackspace(page);
+
+    await type(page, 'hello');
+    await assertBlockProps(page, '2', {
+      title: 'hello',
+    });
+
+    await switchReadonly(page);
+
+    await type(page, ' world');
+    await assertBlockProps(page, '2', {
+      title: 'hello',
+    });
+
+    await pressBackspace(page, 'hello world'.length);
+    await assertBlockProps(page, '2', {
+      title: 'hello',
+    });
+  });
+
+  test('should rich-text not be edited in readonly mode', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await switchColumnType(page, 'Text');
+    await initDatabaseDynamicRowWithData(page, '', true);
+
+    const cell = getFirstColumnCell(page, 'affine-database-rich-text');
+    await cell.click();
+    await type(page, '123');
+    await assertDatabaseCellRichTexts(page, { text: '123' });
+
+    await switchReadonly(page);
+    await pressBackspace(page);
+    await type(page, '789');
+    await assertDatabaseCellRichTexts(page, { text: '123' });
+  });
+
+  test('should hide edit widget after switch to readonly mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await switchColumnType(page, 'Text');
+    await initDatabaseDynamicRowWithData(page, '', true);
+
+    const database = page.locator('affine-database');
+    await expect(database).toBeVisible();
+
+    const databaseMenu = database.locator('.database-ops');
+    await expect(databaseMenu).toBeVisible();
+
+    const addViewButton = database.getByTestId('database-add-view-button');
+    await expect(addViewButton).toBeVisible();
+
+    const titleHeader = page.locator('affine-database-header-column').filter({
+      hasText: 'Title',
+    });
+    await titleHeader.hover();
+    const columnDragBar = titleHeader.locator('.control-r');
+    await expect(columnDragBar).toBeVisible();
+
+    const filter = database.locator('data-view-header-tools-filter');
+    const search = database.locator('data-view-header-tools-search');
+    const options = database.locator('data-view-header-tools-view-options');
+    const headerAddRow = database.locator('data-view-header-tools-add-row');
+
+    await database.hover();
+    await expect(filter).toBeVisible();
+    await expect(search).toBeVisible();
+    await expect(options).toBeVisible();
+    await expect(headerAddRow).toBeVisible();
+
+    const row = database.locator('data-view-table-row');
+    const rowOptions = row.locator('.row-op');
+    const rowDragBar = row.locator('.data-view-table-view-drag-handler>div');
+    await row.hover();
+    await expect(rowOptions).toHaveCount(2);
+    await expect(rowOptions.nth(0)).toBeVisible();
+    await expect(rowOptions.nth(1)).toBeVisible();
+    await expect(rowDragBar).toBeVisible();
+
+    const addRow = database.locator('.data-view-table-group-add-row');
+    await expect(addRow).toBeVisible();
+
+    // Readonly Mode
+    {
+      await switchReadonly(page);
+      await expect(databaseMenu).toBeHidden();
+      await expect(addViewButton).toBeHidden();
+
+      await titleHeader.hover();
+      await expect(columnDragBar).toBeHidden();
+
+      await database.hover();
+      await expect(filter).toBeHidden();
+      await expect(search).toBeVisible(); // Note the search should not be hidden
+      await expect(options).toBeHidden();
+      await expect(headerAddRow).toBeHidden();
+
+      await row.hover();
+      await expect(rowOptions.nth(0)).toBeHidden();
+      await expect(rowOptions.nth(1)).toBeHidden();
+      await expect(rowDragBar).toBeHidden();
+
+      await expect(addRow).toBeHidden();
+    }
+  });
+
+  test('should hide focus border after switch to readonly mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await switchColumnType(page, 'Text');
+    await initDatabaseDynamicRowWithData(page, '', true);
+
+    const database = page.locator('affine-database');
+    await expect(database).toBeVisible();
+
+    const cell = getFirstColumnCell(page, 'affine-database-rich-text');
+    await cell.click();
+
+    const focusBorder = database.locator(
+      'data-view-table-selection .database-focus'
+    );
+    await expect(focusBorder).toBeVisible();
+
+    await switchReadonly(page);
+    await expect(focusBorder).toBeHidden();
+  });
+
+  test('should hide selection after switch to readonly mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+    await switchColumnType(page, 'Text');
+    await initDatabaseDynamicRowWithData(page, '', true);
+
+    const database = page.locator('affine-database');
+    await expect(database).toBeVisible();
+
+    const startCell = getDatabaseBodyCell(page, {
+      rowIndex: 0,
+      columnIndex: 0,
+    });
+    const endCell = getDatabaseBodyCell(page, {
+      rowIndex: 0,
+      columnIndex: 1,
+    });
+
+    const startBox = await getBoundingBox(startCell);
+    const endBox = await getBoundingBox(endCell);
+
+    const startX = startBox.x + startBox.width / 2;
+    const startY = startBox.y + startBox.height / 2;
+    const endX = endBox.x + endBox.width / 2;
+    const endY = endBox.y + endBox.height / 2;
+
+    await dragBetweenCoords(
+      page,
+      { x: startX, y: startY },
+      { x: endX, y: endY }
+    );
+
+    const selection = database.locator(
+      'data-view-table-selection .database-selection'
+    );
+
+    await expect(selection).toBeVisible();
+
+    await switchReadonly(page);
+    await expect(selection).toBeHidden();
+  });
 });

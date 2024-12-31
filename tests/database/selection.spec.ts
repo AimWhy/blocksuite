@@ -1,12 +1,14 @@
 import { expect } from '@playwright/test';
-import { shiftClick } from 'utils/actions/edgeless.js';
 
 import { dragBetweenCoords } from '../utils/actions/drag.js';
+import { shiftClick } from '../utils/actions/edgeless.js';
 import {
   pressArrowDown,
+  pressArrowDownWithShiftKey,
   pressArrowLeft,
   pressArrowRight,
   pressArrowUp,
+  pressArrowUpWithShiftKey,
   pressBackspace,
   pressEnter,
   pressEscape,
@@ -25,9 +27,11 @@ import { test } from '../utils/playwright.js';
 import {
   assertCellsSelection,
   assertDatabaseTitleColumnText,
+  assertKanbanCardHeaderText,
   assertKanbanCardSelected,
   assertKanbanCellSelected,
   assertRowsSelection,
+  clickKanbanCardHeader,
   focusKanbanCardHeader,
   getDatabaseBodyCell,
   getKanbanCard,
@@ -169,6 +173,70 @@ test.describe('row-level selection', () => {
     await pressEscape(page);
     await assertRowsSelection(page, [0, 0]);
   });
+
+  test('move row selection with (up | down)', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+
+    // add two rows
+    await initDatabaseDynamicRowWithData(page, '123123', true);
+    await pressEscape(page);
+
+    await initDatabaseDynamicRowWithData(page, '123123', true);
+    await pressEscape(page);
+
+    await pressEscape(page); // switch to row selection
+
+    await assertRowsSelection(page, [1, 1]);
+
+    await pressArrowUp(page);
+    await assertRowsSelection(page, [0, 0]);
+
+    // should not allow under selection
+    await pressArrowUp(page);
+    await assertRowsSelection(page, [0, 0]);
+
+    await pressArrowDown(page);
+    await assertRowsSelection(page, [1, 1]);
+
+    // should not allow over selection
+    await pressArrowDown(page);
+    await assertRowsSelection(page, [1, 1]);
+  });
+
+  test('increment decrement row selection with shift+(up | down)', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyDatabaseState(page);
+
+    await initDatabaseColumn(page);
+
+    // add two rows
+    await initDatabaseDynamicRowWithData(page, '123123', true);
+    await pressEscape(page);
+
+    await initDatabaseDynamicRowWithData(page, '123123', true);
+    await pressEscape(page);
+
+    await pressEscape(page); // switch to row selection
+
+    await pressArrowUpWithShiftKey(page);
+    await assertRowsSelection(page, [0, 1]);
+
+    await pressArrowDownWithShiftKey(page);
+    await assertRowsSelection(page, [1, 1]); // should decrement back
+
+    await pressArrowUp(page); // go to first row
+
+    await pressArrowDownWithShiftKey(page);
+    await assertRowsSelection(page, [0, 1]);
+
+    await pressArrowUpWithShiftKey(page);
+    await assertRowsSelection(page, [0, 0]);
+  });
 });
 
 test.describe('cell-level selection', () => {
@@ -284,7 +352,6 @@ test.describe('kanban view selection', () => {
     });
 
     await focusKanbanCardHeader(page);
-    await pressEscape(page);
     await assertKanbanCellSelected(page, {
       // group by `number` column, the first(groupIndex: 0) group is `Ungroups`
       groupIndex: 1,
@@ -326,7 +393,6 @@ test.describe('kanban view selection', () => {
     });
 
     await focusKanbanCardHeader(page);
-    await pressEscape(page);
     await pressArrowUp(page);
     await assertKanbanCellSelected(page, {
       groupIndex: 1,
@@ -357,7 +423,6 @@ test.describe('kanban view selection', () => {
     });
 
     await focusKanbanCardHeader(page);
-    await pressEscape(page);
 
     await pressArrowRight(page, 3);
     await assertKanbanCellSelected(page, {
@@ -456,7 +521,7 @@ test.describe('kanban view selection', () => {
     await pressEscape(page);
     await pressEscape(page);
 
-    const card = await getKanbanCard(page, {
+    const card = getKanbanCard(page, {
       groupIndex: 1,
       cardIndex: 0,
     });
@@ -474,5 +539,29 @@ test.describe('kanban view selection', () => {
       groupIndex: 1,
       cardIndex: 0,
     });
+  });
+
+  test("should support move cursor in card's title by arrow key(left&right)", async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initKanbanViewState(page, {
+      rows: ['row1'],
+      columns: [
+        {
+          type: 'rich-text',
+          value: ['text'],
+        },
+      ],
+    });
+
+    await clickKanbanCardHeader(page);
+    await type(page, 'abc');
+    await pressArrowLeft(page, 2);
+    await pressArrowRight(page);
+    await pressBackspace(page);
+    await pressEscape(page);
+
+    await assertKanbanCardHeaderText(page, 'row1ac');
   });
 });

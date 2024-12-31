@@ -1,71 +1,62 @@
-import { assertExists, sleep } from '@blocksuite/global/utils';
-import { BaseBlockModel } from '@blocksuite/store';
+import type { AffineInlineEditor } from '@blocksuite/affine-components/rich-text';
+import type { EditorHost } from '@blocksuite/block-std';
+import type { InlineEditor, InlineRange } from '@blocksuite/inline';
+
+import { getInlineEditorByModel } from '@blocksuite/affine-components/rich-text';
+import {
+  getCurrentNativeRange,
+  isControlledKeyboardEvent,
+} from '@blocksuite/affine-shared/utils';
+import { BlockModel } from '@blocksuite/store';
 import { css, unsafeCSS } from 'lit';
 
-import { isControlledKeyboardEvent } from '../../_common/utils/event.js';
-import { getVirgoByModel } from '../../_common/utils/query.js';
-import { getCurrentNativeRange } from '../../_common/utils/selection.js';
-import type { RichText } from './rich-text/rich-text.js';
-import type { AffineVEditor } from './rich-text/virgo/types.js';
+export function getQuery(
+  inlineEditor: InlineEditor,
+  startRange: InlineRange | null
+) {
+  const nativeRange = getCurrentNativeRange();
+  if (!nativeRange) {
+    return null;
+  }
+  if (nativeRange.startContainer !== nativeRange.endContainer) {
+    return null;
+  }
+  const curRange = inlineEditor.getInlineRange();
+  if (!startRange || !curRange) {
+    return null;
+  }
+  if (curRange.index < startRange.index) {
+    return null;
+  }
+  const text = inlineEditor.yText.toString();
+  return text.slice(startRange.index, curRange.index);
+}
+
+interface ObserverParams {
+  target: HTMLElement;
+  signal: AbortSignal;
+  onInput?: (isComposition: boolean) => void;
+  onDelete?: () => void;
+  onMove?: (step: 1 | -1) => void;
+  onConfirm?: () => void;
+  onAbort?: () => void;
+  onPaste?: () => void;
+  interceptor?: (e: KeyboardEvent, next: () => void) => void;
+}
 
 export const createKeydownObserver = ({
   target,
-  onUpdateQuery,
+  signal,
+  onInput,
+  onDelete,
   onMove,
   onConfirm,
-  onEsc,
+  onAbort,
+  onPaste,
   interceptor = (_, next) => next(),
-  abortController,
-}: {
-  target: RichText;
-  onUpdateQuery: (val: string) => void;
-  onMove: (step: 1 | -1) => void;
-  onConfirm: () => void;
-  onEsc?: () => void;
-  interceptor?: (e: KeyboardEvent, next: () => void) => void;
-  abortController: AbortController;
-}) => {
-  let query = '';
-  const vEditor = target.vEditor;
-  assertExists(
-    vEditor,
-    'Failed to observer keyboard! virgo editor is not exist.'
-  );
-  const startIndex = vEditor?.getVRange()?.index ?? 0;
-
-  const updateQuery = async () => {
-    // Wait for text update
-    await sleep(0);
-    const range = getCurrentNativeRange();
-    if (range.startContainer !== range.endContainer) {
-      console.warn(
-        'Failed to parse query! Current range is not collapsed.',
-        range
-      );
-      abortController.abort();
-      return;
-    }
-    const textNode = range.startContainer;
-    if (textNode.nodeType !== Node.TEXT_NODE) {
-      console.warn(
-        'Failed to parse query! Current range is not a text node.',
-        range
-      );
-      abortController.abort();
-      return;
-    }
-    const curIndex = vEditor.getVRange()?.index ?? 0;
-    const text = vEditor.yText.toString();
-    const previousQuery = query;
-    query = text.slice(startIndex, curIndex);
-
-    if (query !== previousQuery) {
-      onUpdateQuery(query);
-    }
-  };
-
+}: ObserverParams) => {
   const keyDownListener = (e: KeyboardEvent) => {
-    e.stopPropagation();
+    if (e.key === 'Process' || e.isComposing) return;
 
     if (e.defaultPrevented) return;
 
@@ -75,17 +66,22 @@ export const createKeydownObserver = ({
       if (isOnlyCmd && e.key.length === 1) {
         switch (e.key) {
           // Previous command
-          case 'P':
           case 'p': {
-            onMove(-1);
+            onMove?.(-1);
+            e.stopPropagation();
             e.preventDefault();
             return;
           }
           // Next command
-          case 'N':
           case 'n': {
-            onMove(1);
+            onMove?.(1);
+            e.stopPropagation();
             e.preventDefault();
+            return;
+          }
+          // Paste command
+          case 'v': {
+            onPaste?.();
             return;
           }
         }
@@ -95,75 +91,75 @@ export const createKeydownObserver = ({
       // Because we don't know the user's intention
       // Aborting here will cause the above hotkeys to not work
       if (e.key === 'Control' || e.key === 'Meta' || e.key === 'Alt') {
+        e.stopPropagation();
         return;
       }
 
       // Abort when press modifier key + any other key to avoid weird behavior
-      // e.g. press ctrl + a to select all or press ctrl + v to paste
-      abortController.abort();
+      // e.g. press ctrl + a to select all
+      onAbort?.();
       return;
     }
 
+    e.stopPropagation();
+
     if (
       // input abc, 123, etc.
-      (!isControlledKeyboardEvent(e) && e.key.length === 1) ||
-      e.isComposing
+      !isControlledKeyboardEvent(e) &&
+      e.key.length === 1
     ) {
-      updateQuery();
+      onInput?.(false);
       return;
     }
 
     switch (e.key) {
       case 'Escape': {
-        abortController.abort();
+        onAbort?.();
         return;
       }
       case 'Backspace': {
-        if (!query.length) {
-          abortController.abort();
-        }
-        updateQuery();
+        onDelete?.();
         return;
       }
       case 'Enter': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onConfirm();
+        onConfirm?.();
         e.preventDefault();
         return;
       }
       case 'Tab': {
         if (e.shiftKey) {
-          onMove(-1);
+          onMove?.(-1);
         } else {
-          onMove(1);
+          onMove?.(1);
         }
         e.preventDefault();
         return;
       }
       case 'ArrowUp': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onMove(-1);
+        onMove?.(-1);
         e.preventDefault();
         return;
       }
       case 'ArrowDown': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onMove(1);
+        onMove?.(1);
         e.preventDefault();
         return;
       }
       case 'ArrowLeft':
       case 'ArrowRight': {
-        abortController.abort();
+        onAbort?.();
         return;
       }
       default:
@@ -178,82 +174,80 @@ export const createKeydownObserver = ({
     {
       // Workaround: Use capture to prevent the event from triggering the keyboard bindings action
       capture: true,
-      signal: abortController.signal,
+      signal,
     }
   );
 
-  // Fix composition input
-  target.addEventListener('input', updateQuery, {
-    signal: abortController.signal,
-  });
+  // Fix paste input
+  target.addEventListener('paste', () => onDelete?.(), { signal });
 
-  if (onEsc) {
-    const escListener = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onEsc();
-      }
-    };
-    window.addEventListener('keydown', escListener, {
-      signal: abortController.signal,
-    });
-  }
+  // Fix composition input
+  target.addEventListener('compositionend', () => onInput?.(true), { signal });
 };
 
 /**
  * Remove specified text from the current range.
  */
 export function cleanSpecifiedTail(
-  vEditorOrModel: AffineVEditor | BaseBlockModel,
+  editorHost: EditorHost,
+  inlineEditorOrModel: AffineInlineEditor | BlockModel,
   str: string
 ) {
   if (!str) {
     console.warn('Failed to clean text! Unexpected empty string');
     return;
   }
-  const vEditor =
-    vEditorOrModel instanceof BaseBlockModel
-      ? getVirgoByModel(vEditorOrModel)
-      : vEditorOrModel;
-  assertExists(vEditor, 'Editor not found');
-
-  const vRange = vEditor.getVRange();
-  assertExists(vRange);
-  const idx = vRange.index - str.length;
-  const textStr = vEditor.yText.toString().slice(idx, idx + str.length);
+  const inlineEditor =
+    inlineEditorOrModel instanceof BlockModel
+      ? getInlineEditorByModel(editorHost, inlineEditorOrModel)
+      : inlineEditorOrModel;
+  if (!inlineEditor) {
+    return;
+  }
+  const inlineRange = inlineEditor.getInlineRange();
+  if (!inlineRange) {
+    return;
+  }
+  const idx = inlineRange.index - str.length;
+  const textStr = inlineEditor.yText.toString().slice(idx, idx + str.length);
   if (textStr !== str) {
     console.warn(
       `Failed to clean text! Text mismatch expected: ${str} but actual: ${textStr}`
     );
     return;
   }
-  vEditor.deleteText({ index: idx, length: str.length });
-  vEditor.setVRange({
+  inlineEditor.deleteText({ index: idx, length: str.length });
+  inlineEditor.setInlineRange({
     index: idx,
     length: 0,
   });
 }
 
 /**
- * You should add a container before the scrollbar style to prevent the style pollution of the whole page.
+ * You should add a container before the scrollbar style to prevent the style pollution of the whole doc.
  */
 export const scrollbarStyle = (container: string) => {
-  if (!container)
-    throw new Error(
-      'To prevent style pollution of the whole page, you must add a container before the scrollbar style.'
+  if (!container) {
+    console.error(
+      'To prevent style pollution of the whole doc, you must add a container before the scrollbar style.'
     );
+    return css``;
+  }
 
   // sanitize container name
-  if (
-    container.length > 50 ||
-    container.includes('{') ||
-    container.includes('}')
-  )
-    throw new Error('Invalid container name!');
+  if (container.includes('{') || container.includes('}')) {
+    console.error('Invalid container name! Please use a valid CSS selector.');
+    return css``;
+  }
 
   return css`
+    ${unsafeCSS(container)} {
+      scrollbar-gutter: stable;
+    }
     ${unsafeCSS(container)}::-webkit-scrollbar {
       -webkit-appearance: none;
       width: 4px;
+      height: 4px;
     }
     ${unsafeCSS(container)}::-webkit-scrollbar-thumb {
       border-radius: 2px;

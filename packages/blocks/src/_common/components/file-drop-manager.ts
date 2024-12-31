@@ -1,204 +1,174 @@
-import { assertExists } from '@blocksuite/global/utils';
-import type { BaseBlockModel, BlockProps, Page } from '@blocksuite/store';
+import type { DragIndicator } from '@blocksuite/affine-components/drag-indicator';
+import type { BlockService, EditorHost } from '@blocksuite/block-std';
+import type { IVec } from '@blocksuite/global/utils';
+import type { BlockModel } from '@blocksuite/store';
 
-import type { AbstractEditor } from '../../_common/utils/index.js';
 import {
-  asyncFocusRichText,
-  calcDropTarget,
-  type DropResult,
-  getBlockElementByModel,
-  getClosestBlockElementByPoint,
-  getModelByBlockElement,
+  getClosestBlockComponentByPoint,
+  isInsidePageEditor,
   matchFlavours,
-  Point,
-} from '../../_common/utils/index.js';
-import type { ImageBlockModel } from '../../image-block/index.js';
-import type {
-  DocPageBlockComponent,
-  EdgelessPageBlockComponent,
-} from '../../page-block/index.js';
-import { Vec } from '../../surface-block/index.js';
-import type { DragIndicator } from './index.js';
+} from '@blocksuite/affine-shared/utils';
+import { assertExists, Point } from '@blocksuite/global/utils';
 
-export type GetPageInfo = () => {
-  page: Page;
-  mode: 'page' | 'edgeless';
-  pageBlock: DocPageBlockComponent | EdgelessPageBlockComponent | undefined;
+import { calcDropTarget, type DropResult } from '../../_common/utils/index.js';
+
+export type onDropProps = {
+  files: File[];
+  targetModel: BlockModel | null;
+  place: 'before' | 'after';
+  point: IVec;
 };
 
-type ImportHandler = (file: File) => Promise<Partial<BlockProps> | void>;
-
-type FileDropRule = {
-  name: string;
-  matcher: (file: File) => boolean;
-  handler: ImportHandler;
+export type FileDropOptions = {
+  flavour: string;
+  onDrop?: ({
+    files,
+    targetModel,
+    place,
+    point,
+  }: onDropProps) => Promise<boolean> | void;
 };
 
 export class FileDropManager {
-  private _editor: AbstractEditor;
+  private static _dropResult: DropResult | null = null;
+
+  private _blockService: BlockService;
+
+  private _fileDropOptions: FileDropOptions;
 
   private _indicator!: DragIndicator;
-  private _point: Point | null = null;
-  private _result: DropResult | null = null;
-  private _handlers: FileDropRule[] = [];
 
-  constructor(_editor: AbstractEditor) {
-    this._editor = _editor;
-    this._indicator = <DragIndicator>(
-      document.querySelector('affine-drag-indicator')
-    );
-    if (!this._indicator) {
-      this._indicator = <DragIndicator>(
-        document.createElement('affine-drag-indicator')
-      );
-      document.body.appendChild(this._indicator);
-    }
-  }
+  private _onDrop = (event: DragEvent) => {
+    this._indicator.rect = null;
+
+    const { onDrop } = this._fileDropOptions;
+    if (!onDrop) return;
+
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) return;
+
+    const effectAllowed = dataTransfer.effectAllowed;
+    if (effectAllowed === 'none') return;
+
+    const droppedFiles = dataTransfer.files;
+    if (!droppedFiles || !droppedFiles.length) return;
+
+    event.preventDefault();
+
+    const { targetModel, type: place } = this;
+    const { x, y } = event;
+
+    onDrop({
+      files: [...droppedFiles],
+      targetModel,
+      place,
+      point: [x, y],
+    })?.catch(console.error);
+  };
+
+  onDragLeave = () => {
+    FileDropManager._dropResult = null;
+    this._indicator.rect = null;
+  };
 
   onDragOver = (event: DragEvent) => {
     event.preventDefault();
 
-    // allow only external drag-and-drop files
-    const effectAllowed = event.dataTransfer?.effectAllowed ?? 'none';
-    if (effectAllowed !== 'all') return;
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) return;
+
+    const effectAllowed = dataTransfer.effectAllowed;
+    if (effectAllowed === 'none') return;
 
     const { clientX, clientY } = event;
     const point = new Point(clientX, clientY);
-    const element = getClosestBlockElementByPoint(point.clone());
+    const element = getClosestBlockComponentByPoint(point.clone());
 
-    let result = null;
-    let rect = null;
+    let result: DropResult | null = null;
     if (element) {
-      const model = getModelByBlockElement(element);
-      // TODO: Currently only picture types are supported, `affine:image`
-      result = calcDropTarget(point, model, element, [], 1, 'affine:image');
-      if (result) {
-        rect = result.rect;
+      const model = element.model;
+      const parent = this.doc.getParent(model);
+      if (!matchFlavours(parent, ['affine:surface'])) {
+        result = calcDropTarget(point, model, element);
       }
     }
-
-    this._result = result;
-    this._indicator.rect = rect;
-  };
-
-  onDrop = async (event: DragEvent) => {
-    event.preventDefault();
-
-    const files = event.dataTransfer?.files;
-    if (!files || !files.length) {
-      this._result = null;
+    if (result) {
+      FileDropManager._dropResult = result;
+      this._indicator.rect = result.rect;
+    } else {
+      FileDropManager._dropResult = null;
       this._indicator.rect = null;
-      return;
     }
-
-    const { clientX, clientY } = event;
-    this._point = new Point(clientX, clientY);
-
-    const blocks = [];
-    const len = files.length;
-    let i = 0;
-
-    for (; i < len; i++) {
-      const file = files[i];
-      const handler = this.findFileHandler(file);
-
-      if (!handler) {
-        console.warn(`This ${file.type} is not currently supported.`);
-        continue;
-      }
-
-      const block = await handler(file);
-      if (block) blocks.push(block);
-    }
-
-    this._onDropEnd(this._point, blocks, this._result);
-
-    this._point = null;
-    this._result = null;
-    this._indicator.rect = null;
   };
 
-  private _onDropEnd(
-    point: Point,
-    models: Partial<BaseBlockModel>[],
-    result: DropResult | null
-  ) {
-    const len = models.length;
-    if (!len) return;
+  get doc() {
+    return this._blockService.doc;
+  }
 
-    const { page, mode } = this._editor;
-    const pageBlock = page.root;
-    assertExists(pageBlock);
+  get editorHost(): EditorHost {
+    return this._blockService.std.host;
+  }
 
-    const isPageMode = mode === 'page';
-    let type = result?.type || 'none';
-    let model = result?.modelState.model || null;
+  get targetModel(): BlockModel | null {
+    let targetModel = FileDropManager._dropResult?.modelState.model || null;
 
-    if (type === 'none' && isPageMode) {
-      type = 'after';
-      if (!model) {
-        const lastNote = pageBlock.children[pageBlock.children.length - 1];
-        if (!matchFlavours(lastNote, ['affine:note']))
-          throw new Error('The last block is not a note block.');
-        model = lastNote.lastItem();
+    if (!targetModel && isInsidePageEditor(this.editorHost)) {
+      const rootModel = this.doc.root;
+      assertExists(rootModel);
+
+      let lastNote = rootModel.children[rootModel.children.length - 1];
+      if (!lastNote || !matchFlavours(lastNote, ['affine:note'])) {
+        const newNoteId = this.doc.addBlock('affine:note', {}, rootModel.id);
+        const newNote = this.doc.getBlockById(newNoteId);
+        assertExists(newNote);
+        lastNote = newNote;
       }
-    }
 
-    if (type === 'database') {
-      type = 'after';
-    }
-
-    let selectedId: string | undefined;
-    let focusId: string | undefined;
-
-    page.captureSync();
-
-    if (type !== 'none' && model) {
-      const parent = page.getParent(model);
-      assertExists(parent);
-      const ids = page.addSiblingBlocks(model, models, type);
-      focusId = ids[ids.length - 1];
-      if (isPageMode) asyncFocusRichText(page, focusId);
-      return;
-    }
-    if (isPageMode) return;
-
-    const edgelessBlockEle = getBlockElementByModel(
-      pageBlock
-    ) as EdgelessPageBlockComponent | null;
-    assertExists(edgelessBlockEle);
-    // In edgeless mode
-    // Creates new notes on blank area.
-    let i = 0;
-    for (; i < len; i++) {
-      const model = models[i];
-      if (model.flavour === 'affine:image') {
-        selectedId = (edgelessBlockEle as EdgelessPageBlockComponent).addImage(
-          model as ImageBlockModel,
-          Vec.toVec(point)
+      const lastItem = lastNote.children[lastNote.children.length - 1];
+      if (lastItem) {
+        targetModel = lastItem;
+      } else {
+        const newParagraphId = this.doc.addBlock(
+          'affine:paragraph',
+          {},
+          lastNote,
+          0
         );
+        const newParagraph = this.doc.getBlockById(newParagraphId);
+        assertExists(newParagraph);
+        targetModel = newParagraph;
       }
     }
-    if (!selectedId || !focusId) return;
-
-    edgelessBlockEle.setSelection(selectedId, true, focusId, point);
+    return targetModel;
   }
 
-  findFileHandler(file: File): ImportHandler | undefined {
-    const ruler = this._handlers.find(handler => handler.matcher(file));
-    return ruler?.handler;
+  get type(): 'before' | 'after' {
+    return !FileDropManager._dropResult ||
+      FileDropManager._dropResult.type !== 'before'
+      ? 'after'
+      : 'before';
   }
 
-  /**
-   * Registers a processing function to handle the specified type.
-   */
-  register(rule: FileDropRule) {
-    // Remove duplicated rule
-    this._handlers = this._handlers.filter(({ name }) => name !== rule.name);
-    this._handlers.push(rule);
-  }
+  constructor(blockService: BlockService, fileDropOptions: FileDropOptions) {
+    this._blockService = blockService;
+    this._fileDropOptions = fileDropOptions;
 
-  clear() {
-    this._handlers = [];
+    this._indicator = document.querySelector(
+      'affine-drag-indicator'
+    ) as DragIndicator;
+    if (!this._indicator) {
+      this._indicator = document.createElement(
+        'affine-drag-indicator'
+      ) as DragIndicator;
+      document.body.append(this._indicator);
+    }
+
+    if (fileDropOptions.onDrop) {
+      this._blockService.disposables.addFromEvent(
+        this._blockService.std.host,
+        'drop',
+        this._onDrop
+      );
+    }
   }
 }

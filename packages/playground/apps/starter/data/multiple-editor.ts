@@ -1,36 +1,45 @@
-import { EditorContainer } from '@blocksuite/editor';
-import { Text, type Workspace } from '@blocksuite/store';
+import { RefNodeSlotsProvider } from '@blocksuite/affine-components/rich-text';
+import { AffineEditorContainer } from '@blocksuite/presets';
+import { type DocCollection, Text } from '@blocksuite/store';
 
-import { createEditor } from '../utils';
-import { type InitFn } from './utils';
+import type { InitFn } from './utils.js';
 
-export const multiEditor: InitFn = async (workspace: Workspace, id: string) => {
-  const page = workspace.createPage({ id });
-  await page.load(() => {
-    // Add page block and surface block at root level
-    const pageBlockId = page.addBlock('affine:page', {
+export const multiEditor: InitFn = (collection: DocCollection, id: string) => {
+  const doc = collection.createDoc({ id });
+  doc.load(() => {
+    // Add root block and surface block at root level
+    const rootId = doc.addBlock('affine:page', {
       title: new Text(),
     });
 
-    page.addBlock('affine:surface', {}, pageBlockId);
+    doc.addBlock('affine:surface', {}, rootId);
 
-    // Add note block inside page block
-    const noteId = page.addBlock('affine:note', {}, pageBlockId);
+    // Add note block inside root block
+    const noteId = doc.addBlock('affine:note', {}, rootId);
     // Add paragraph block inside note block
-    page.addBlock('affine:paragraph', {}, noteId);
+    doc.addBlock('affine:paragraph', {}, noteId);
   });
 
-  page.resetHistory();
+  doc.resetHistory();
 
   const app = document.getElementById('app');
   if (app) {
-    createEditor(page, app);
+    const editor = new AffineEditorContainer();
+    editor.doc = doc;
+    editor.std
+      .get(RefNodeSlotsProvider)
+      .docLinkClicked.on(({ pageId: docId }) => {
+        const target = collection.getDoc(docId);
+        if (!target) {
+          throw new Error(`Failed to jump to doc ${docId}`);
+        }
+        target.load();
+        editor.doc = target;
+      });
+    editor.style.borderRight = '1px solid var(--affine-border-color)';
+
+    app.append(editor);
     app.style.display = 'flex';
-    app.childNodes.forEach(node => {
-      if (node instanceof EditorContainer) {
-        node.style.flex = '1';
-      }
-    });
   }
 };
 
@@ -38,30 +47,46 @@ multiEditor.id = 'multiple-editor';
 multiEditor.displayName = 'Multiple Editor Example';
 multiEditor.description = 'Multiple Editor basic example';
 
-export const multiEditorVertical: InitFn = async (
-  workspace: Workspace,
-  pageId: string
+export const multiEditorVertical: InitFn = (
+  collection: DocCollection,
+  docId: string
 ) => {
-  const page = workspace.createPage({ id: pageId });
-  await page.load(() => {
-    // Add page block and surface block at root level
-    const pageBlockId = page.addBlock('affine:page', {
+  const doc = collection.createDoc({ id: docId });
+  doc.load(() => {
+    // Add root block and surface block at root level
+    const rootId = doc.addBlock('affine:page', {
       title: new Text(),
     });
 
-    page.addBlock('affine:surface', {}, pageBlockId);
+    doc.addBlock('affine:surface', {}, rootId);
 
-    // Add note block inside page block
-    const noteId = page.addBlock('affine:note', {}, pageBlockId);
+    // Add note block inside root block
+    const noteId = doc.addBlock('affine:note', {}, rootId);
     // Add paragraph block inside note block
-    page.addBlock('affine:paragraph', {}, noteId);
+    doc.addBlock('affine:paragraph', {}, noteId);
   });
 
-  page.resetHistory();
+  doc.resetHistory();
 
   const app = document.getElementById('app');
   if (app) {
-    createEditor(page, app);
+    const editor = new AffineEditorContainer();
+    editor.doc = doc;
+    editor.std
+      .get(RefNodeSlotsProvider)
+      .docLinkClicked.on(({ pageId: docId }) => {
+        const target = collection.getDoc(docId);
+        if (!target) {
+          throw new Error(`Failed to jump to doc ${docId}`);
+        }
+        target.load();
+        editor.doc = target;
+      });
+    editor.style.borderBottom = '1px solid var(--affine-border-color)';
+
+    app.append(editor);
+    app.style.display = 'flex';
+    app.style.flexDirection = 'column';
   }
 };
 

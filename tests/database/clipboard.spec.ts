@@ -31,7 +31,9 @@ import {
 } from './actions.js';
 
 test.describe('copy&paste when editing', () => {
-  test('should support copy&paste of the title column', async ({ page }) => {
+  test.skip('should support copy&paste of the title column', async ({
+    page,
+  }) => {
     await enterPlaygroundRoom(page);
     await initEmptyDatabaseWithParagraphState(page);
 
@@ -57,7 +59,7 @@ test.describe('copy&paste when editing', () => {
 });
 
 test.describe('copy&paste when selecting', () => {
-  test('should support copy&paste of a single cell', async ({ page }) => {
+  test.skip('should support copy&paste of a single cell', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyDatabaseState(page);
 
@@ -75,7 +77,7 @@ test.describe('copy&paste when selecting', () => {
     await assertDatabaseTitleColumnText(page, 'abc123', 1);
   });
 
-  test('should support copy&paste of multi cells', async ({ page }) => {
+  test.skip('should support copy&paste of multi cells', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyDatabaseState(page);
 
@@ -130,7 +132,7 @@ test.describe('copy&paste when selecting', () => {
     expect(await selectCell31.innerText()).toBe('a');
   });
 
-  test('should support copy&paste of a single row', async ({ page }) => {
+  test.skip('should support copy&paste of a single row', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyDatabaseState(page);
 

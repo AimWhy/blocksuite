@@ -1,18 +1,34 @@
+import { DEFAULT_NOTE_BACKGROUND_COLOR } from '@blocksuite/affine-model';
 import { expect, type Page } from '@playwright/test';
-import { waitForVirgoStateUpdated, waitNextFrame } from 'utils/actions/misc.js';
 
-import { clickView } from '../utils/actions/click.js';
+import { clickView, moveView } from '../utils/actions/click.js';
+import { dragBetweenCoords } from '../utils/actions/drag.js';
 import {
   addNote,
+  changeEdgelessNoteBackground,
+  changeShapeFillColor,
+  changeShapeStrokeColor,
   createShapeElement,
+  deleteAll,
   dragBetweenViewCoords,
   edgelessCommonSetup,
   getEdgelessSelectedRectModel,
   Shape,
+  switchEditorMode,
   toViewCoord,
+  triggerComponentToolbarAction,
 } from '../utils/actions/edgeless.js';
 import {
+  enterPlaygroundRoom,
+  initEmptyEdgelessState,
+  waitForInlineEditorStateUpdated,
+  waitNextFrame,
+} from '../utils/actions/misc.js';
+import {
+  assertConnectorStrokeColor,
   assertEdgelessCanvasText,
+  assertEdgelessNoteBackground,
+  assertExists,
   assertRichTexts,
   assertSelectedBound,
 } from '../utils/asserts.js';
@@ -59,10 +75,12 @@ test.describe('auto-complete', () => {
     test('click on note auto-complete button', async ({ page }) => {
       await edgelessCommonSetup(page);
       await addNote(page, 'note', 100, 100);
+      await page.mouse.click(600, 50);
       await page.mouse.click(300, 50);
       await page.mouse.click(150, 120);
       const rect = await getEdgelessSelectedRectModel(page);
-      await clickView(page, [rect[0] + rect[2] + 10, rect[1] + rect[3] / 2]);
+      await moveView(page, [rect[0] + rect[2] + 30, rect[1] + rect[3] / 2]);
+      await clickView(page, [rect[0] + rect[2] + 30, rect[1] + rect[3] / 2]);
       const newRect = await getEdgelessSelectedRectModel(page);
       expect(rect[0]).not.toEqual(newRect[0]);
       expect(rect[1]).toEqual(newRect[1]);
@@ -90,7 +108,14 @@ test.describe('auto-complete', () => {
     test('drag on right auto-complete button to add canvas text', async ({
       page,
     }) => {
-      await edgelessCommonSetup(page);
+      await enterPlaygroundRoom(page, {
+        flags: {
+          enable_edgeless_text: false,
+        },
+      });
+      await initEmptyEdgelessState(page);
+      await switchEditorMode(page);
+      await deleteAll(page);
       await createShapeElement(page, [0, 0], [100, 100], Shape.Square);
       await assertSelectedBound(page, [0, 0, 100, 100]);
       await dragBetweenViewCoords(page, [120, 50], [200, 0]);
@@ -99,7 +124,7 @@ test.describe('auto-complete', () => {
       await expect(canvasTextButton).toBeVisible();
       await canvasTextButton.click();
 
-      await waitForVirgoStateUpdated(page);
+      await waitForInlineEditorStateUpdated(page);
       await waitNextFrame(page);
       await page.keyboard.type('hello');
       await assertEdgelessCanvasText(page, 'hello');
@@ -109,6 +134,12 @@ test.describe('auto-complete', () => {
       await edgelessCommonSetup(page);
       await createShapeElement(page, [0, 0], [100, 100], Shape.Square);
       await assertSelectedBound(page, [0, 0, 100, 100]);
+      await triggerComponentToolbarAction(page, 'changeShapeStrokeColor');
+      const lineColor = '--affine-palette-line-red';
+      await changeShapeStrokeColor(page, lineColor);
+      await triggerComponentToolbarAction(page, 'changeShapeFillColor');
+      const color = '--affine-palette-shape-green';
+      await changeShapeFillColor(page, color);
       await dragBetweenViewCoords(page, [120, 50], [200, 0]);
 
       const noteButton = getAutoCompletePanelButton(page, 'note');
@@ -116,12 +147,81 @@ test.describe('auto-complete', () => {
       await noteButton.click();
       await waitNextFrame(page);
 
-      expect(await page.locator('affine-note').count()).toBe(1);
-      const [x, y] = await toViewCoord(page, [240, 0]);
+      const edgelessNote = page.locator('affine-edgeless-note');
+
+      expect(await edgelessNote.count()).toBe(1);
+      const [x, y] = await toViewCoord(page, [240, 20]);
       await page.mouse.click(x, y);
       await page.keyboard.type('hello');
       await waitNextFrame(page);
       await assertRichTexts(page, ['hello']);
+
+      const noteId = await page.evaluate(() => {
+        const note = document.body.querySelector('affine-edgeless-note');
+        return note?.getAttribute('data-block-id');
+      });
+      assertExists(noteId);
+      await assertEdgelessNoteBackground(
+        page,
+        noteId,
+        DEFAULT_NOTE_BACKGROUND_COLOR
+      );
+
+      const rect = await edgelessNote.boundingBox();
+      assertExists(rect);
+
+      // blur note block
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height * 3);
+      await waitNextFrame(page);
+
+      // select connector
+      await dragBetweenViewCoords(page, [140, 50], [160, 0]);
+      await waitNextFrame(page);
+      await assertConnectorStrokeColor(page, lineColor);
+
+      // select note block
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      await waitNextFrame(page);
+
+      await triggerComponentToolbarAction(page, 'changeNoteColor');
+      const noteColor = '--affine-note-background-red';
+      await changeEdgelessNoteBackground(page, noteColor);
+
+      // move to arrow icon
+      await page.mouse.move(
+        rect.x + rect.width + 20,
+        rect.y + rect.height / 2,
+        { steps: 5 }
+      );
+      await waitNextFrame(page);
+
+      // drag arrow
+      await dragBetweenCoords(
+        page,
+        {
+          x: rect.x + rect.width + 20,
+          y: rect.y + rect.height / 2,
+        },
+        {
+          x: rect.x + rect.width + 20 + 50,
+          y: rect.y + rect.height / 2 + 50,
+        }
+      );
+
+      // `Add a same object` button has the same type.
+      const noteButton2 = getAutoCompletePanelButton(page, 'note').nth(0);
+      await expect(noteButton2).toBeVisible();
+      await noteButton2.click();
+      await waitNextFrame(page);
+
+      const noteId2 = await page.evaluate(() => {
+        const note = document.body.querySelectorAll('affine-edgeless-note')[1];
+        return note?.getAttribute('data-block-id');
+      });
+      assertExists(noteId2);
+      await assertEdgelessNoteBackground(page, noteId, noteColor);
+
+      expect(await edgelessNote.count()).toBe(2);
     });
 
     test('drag on right auto-complete button to add frame', async ({

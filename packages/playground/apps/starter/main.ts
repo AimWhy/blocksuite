@@ -1,150 +1,89 @@
-/// <reference types="./env.d.ts" />
-import '@blocksuite/blocks';
-import '@blocksuite/editor';
-import './components/start-panel';
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import '@blocksuite/editor/themes/affine.css';
-
-import { TestUtils } from '@blocksuite/blocks';
-import { ContentParser } from '@blocksuite/blocks/content-parser';
-import { AffineSchemas } from '@blocksuite/blocks/models';
-import type { BlockSuiteRoot } from '@blocksuite/lit';
-import type { DocProvider, Page } from '@blocksuite/store';
-import { Job, Workspace } from '@blocksuite/store';
-
-import { CustomCopilotPanel } from './components/copilot/custom-copilot-panel.js';
-import { CustomNavigationPanel } from './components/custom-navigation-panel.js';
-import { DebugMenu } from './components/debug-menu.js';
-import type { InitFn } from './data';
 import {
-  createEditor,
-  createWorkspaceOptions,
-  defaultMode,
-  initParam,
-  isE2E,
-  tryInitExternalContent,
-} from './utils.js';
+  type ExtensionType,
+  WidgetViewMapExtension,
+  WidgetViewMapIdentifier,
+} from '@blocksuite/block-std';
+import * as blocks from '@blocksuite/blocks';
+import {
+  CommunityCanvasTextFonts,
+  DocModeProvider,
+  FontConfigExtension,
+  ParseDocUrlProvider,
+  QuickSearchProvider,
+  RefNodeSlotsExtension,
+  RefNodeSlotsProvider,
+} from '@blocksuite/blocks';
+import { effects as blocksEffects } from '@blocksuite/blocks/effects';
+import * as globalUtils from '@blocksuite/global/utils';
+import * as editor from '@blocksuite/presets';
+import { effects as presetsEffects } from '@blocksuite/presets/effects';
+import * as store from '@blocksuite/store';
 
-const options = createWorkspaceOptions();
+import '../../style.css';
+import { mockDocModeService } from '../_common/mock-services.js';
+import { setupEdgelessTemplate } from '../_common/setup.js';
+import '../dev-format.js';
+import {
+  createStarterDocCollection,
+  initStarterDocCollection,
+} from './utils/collection.js';
+import { mountDefaultDocEditor } from './utils/editor.js';
 
-// Subscribe for page update and create editor after page loaded.
-function subscribePage(workspace: Workspace) {
-  workspace.slots.pageAdded.once(pageId => {
-    if (typeof globalThis.targetPageId === 'string') {
-      if (pageId !== globalThis.targetPageId) {
-        // if there's `targetPageId` which not same as the `pageId`
-        return;
-      }
-    }
-    const app = document.getElementById('app');
-    if (!app) return;
-
-    const page = workspace.getPage(pageId) as Page;
-
-    const editor = createEditor(page, app);
-    const contentParser = new ContentParser(page);
-    const debugMenu = new DebugMenu();
-    const navigationPanel = new CustomNavigationPanel();
-    const copilotPanel = new CustomCopilotPanel();
-
-    debugMenu.workspace = workspace;
-    debugMenu.editor = editor;
-    debugMenu.mode = defaultMode;
-    debugMenu.contentParser = contentParser;
-    debugMenu.navigationPanel = navigationPanel;
-    debugMenu.copilotPanel = copilotPanel;
-
-    navigationPanel.editor = editor;
-    copilotPanel.editor = editor;
-
-    document.body.appendChild(debugMenu);
-    document.body.appendChild(navigationPanel);
-    document.body.appendChild(copilotPanel);
-
-    window.editor = editor;
-    window.page = page;
-  });
-}
-
-export async function initPageContentByParam(
-  workspace: Workspace,
-  param: string,
-  pageId: string
-) {
-  const functionMap = new Map<
-    string,
-    (workspace: Workspace, id: string) => void
-  >();
-  Object.values(
-    (await import('./data/index.js')) as Record<string, InitFn>
-  ).forEach(fn => functionMap.set(fn.id, fn));
-  // Load the preset playground documentation when `?init` param provided
-  if (param === '') {
-    param = 'preset';
-  }
-
-  // Load built-in init function when `?init=heavy` param provided
-  if (functionMap.has(param)) {
-    functionMap.get(param)?.(workspace, pageId);
-    const page = workspace.getPage(pageId);
-    await page?.load();
-    page?.resetHistory();
-    return;
-  }
-
-  // Try to load base64 content or markdown content from url
-  await tryInitExternalContent(workspace, param, pageId);
-}
+blocksEffects();
+presetsEffects();
 
 async function main() {
-  if (window.workspace) return;
+  if (window.collection) return;
 
-  const workspace = new Workspace(options);
-  window.workspace = workspace;
-  window.job = new Job({ workspace });
-  window.blockSchemas = AffineSchemas;
-  window.Y = Workspace.Y;
-  window.ContentParser = ContentParser;
-  Object.defineProperty(globalThis, 'root', {
-    get() {
-      return document.querySelector('block-suite-root') as BlockSuiteRoot;
-    },
-  });
+  setupEdgelessTemplate();
 
-  const syncProviders = async (providers: DocProvider[]) => {
-    for (const provider of providers) {
-      if ('active' in provider) {
-        provider.sync();
-        await provider.whenReady;
-      } else if ('passive' in provider) {
-        provider.connect();
-      }
-    }
-  };
+  const params = new URLSearchParams(location.search);
+  const room = params.get('room') ?? Math.random().toString(16).slice(2, 8);
+  const isE2E = room.startsWith('playwright');
+  const collection = createStarterDocCollection();
 
-  await syncProviders(workspace.providers);
+  if (isE2E) {
+    Object.defineProperty(window, '$blocksuite', {
+      value: Object.freeze({
+        store,
+        blocks,
+        global: { utils: globalUtils },
+        editor,
+        identifiers: {
+          WidgetViewMapIdentifier,
+          QuickSearchProvider,
+          DocModeProvider,
+          RefNodeSlotsProvider,
+          ParseDocUrlService: ParseDocUrlProvider,
+        },
+        defaultExtensions: (): ExtensionType[] => [
+          FontConfigExtension(CommunityCanvasTextFonts),
+          RefNodeSlotsExtension(),
+        ],
+        extensions: {
+          FontConfigExtension: FontConfigExtension(CommunityCanvasTextFonts),
+          WidgetViewMapExtension,
+          RefNodeSlotsExtension: RefNodeSlotsExtension(),
+        },
+        mockServices: {
+          mockDocModeService,
+        },
+      }),
+    });
 
-  workspace.slots.pageAdded.on(async pageId => {
-    const page = workspace.getPage(pageId) as Page;
-    await page.load();
-  });
+    // test if blocksuite can run in a web worker, SEE: tests/worker.spec.ts
+    // window.testWorker = new Worker(
+    //   new URL('./utils/test-worker.ts', import.meta.url),
+    //   {
+    //     type: 'module',
+    //   }
+    // );
 
-  window.testUtils = new TestUtils();
-
-  // In E2E environment, initial state should be generated by test case,
-  // instead of using this default setup.
-  if (isE2E) return;
-
-  subscribePage(workspace);
-  if (initParam !== null) {
-    await initPageContentByParam(workspace, initParam, 'page:home');
     return;
   }
 
-  // Open default examples list when no `?init` param is provided
-  const exampleList = document.createElement('start-panel');
-  workspace.slots.pageAdded.once(() => exampleList.remove());
-  document.body.prepend(exampleList);
+  await initStarterDocCollection(collection);
+  await mountDefaultDocEditor(collection);
 }
 
-main();
+main().catch(console.error);

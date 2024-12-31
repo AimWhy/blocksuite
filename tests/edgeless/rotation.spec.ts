@@ -8,6 +8,7 @@ import {
   switchEditorMode,
 } from '../utils/actions/index.js';
 import {
+  assertEdgelessSelectedReactCursor,
   assertEdgelessSelectedRect,
   assertEdgelessSelectedRectRotation,
 } from '../utils/asserts.js';
@@ -102,11 +103,11 @@ test.describe('rotation', () => {
     );
 
     await dragBetweenCoords(page, { x: 90, y: 90 }, { x: 310, y: 110 });
-    await assertEdgelessSelectedRect(page, [88, 88, 224, 124]);
+    await assertEdgelessSelectedRect(page, [100, 100, 200, 100]);
 
     await rotateElementByHandle(page, 90, 'bottom-right');
     await assertEdgelessSelectedRectRotation(page, 0);
-    await assertEdgelessSelectedRect(page, [138, 38, 124, 224]);
+    await assertEdgelessSelectedRect(page, [150, 50, 100, 200]);
   });
 
   test('combination with resizing', async ({ page }) => {
@@ -149,20 +150,78 @@ test.describe('rotation', () => {
     );
 
     await dragBetweenCoords(page, { x: 90, y: 90 }, { x: 310, y: 110 });
-    await assertEdgelessSelectedRect(page, [88, 88, 224, 124]);
+    await assertEdgelessSelectedRect(page, [100, 100, 200, 100]);
 
     await rotateElementByHandle(page, 90, 'bottom-left');
     await assertEdgelessSelectedRectRotation(page, 0);
-    await assertEdgelessSelectedRect(page, [138, 38, 124, 224]);
+    await assertEdgelessSelectedRect(page, [150, 50, 100, 200]);
 
     await resizeElementByHandle(page, { x: -10, y: -20 }, 'bottom-right');
-    await assertEdgelessSelectedRect(page, [138, 38, 114, 204]);
+    await assertEdgelessSelectedRect(page, [150, 50, 90, 180]);
 
     await rotateElementByHandle(page, -90, 'bottom-right');
     await assertEdgelessSelectedRectRotation(page, 0);
-    await assertEdgelessSelectedRect(page, [93, 83, 204, 114]);
+    await assertEdgelessSelectedRect(page, [105, 95, 180, 90]);
 
     await resizeElementByHandle(page, { x: 20, y: 10 }, 'bottom-right');
-    await assertEdgelessSelectedRect(page, [93, 83, 224, 124]);
+    await assertEdgelessSelectedRect(page, [105, 95, 200, 100]);
+  });
+});
+
+test.describe('cursor style', () => {
+  test('update resize cursor direction after rotating', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyEdgelessState(page);
+    await switchEditorMode(page);
+
+    await addBasicRectShapeElement(
+      page,
+      { x: 100, y: 100 },
+      { x: 200, y: 200 }
+    );
+
+    await rotateElementByHandle(page, 45, 'top-left');
+    await assertEdgelessSelectedRectRotation(page, 45);
+
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'top',
+      cursor: 'nesw-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'right',
+      cursor: 'nwse-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'bottom',
+      cursor: 'nesw-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'left',
+      cursor: 'nwse-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'top-right',
+      cursor: 'ew-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'top-left',
+      cursor: 'ns-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'bottom-right',
+      cursor: 'ns-resize',
+    });
+    await assertEdgelessSelectedReactCursor(page, {
+      mode: 'resize',
+      handle: 'bottom-left',
+      cursor: 'ew-resize',
+    });
   });
 });

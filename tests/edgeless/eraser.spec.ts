@@ -17,7 +17,7 @@ import {
 } from '../utils/asserts.js';
 import { test } from '../utils/playwright.js';
 
-test('earse shape', async ({ page }) => {
+test('erase shape', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyEdgelessState(page);
   await switchEditorMode(page);
@@ -32,11 +32,11 @@ test('earse shape', async ({ page }) => {
   await assertEdgelessNonSelectedRect(page);
 });
 
-test('earse note', async ({ page }) => {
+test('erase note', async ({ page }) => {
   await enterPlaygroundRoom(page);
   const { noteId } = await initEmptyEdgelessState(page);
   await switchEditorMode(page);
-  await assertBlockCount(page, 'note', 1);
+  await assertBlockCount(page, 'edgeless-note', 1);
 
   await setEdgelessTool(page, 'eraser');
   const box = await getNoteBoundBoxInEdgeless(page, noteId);
@@ -45,5 +45,5 @@ test('earse note', async ({ page }) => {
     { x: 0, y: 0 },
     { x: box.x + 10, y: box.y + 10 }
   );
-  await assertBlockCount(page, 'note', 0);
+  await assertBlockCount(page, 'edgeless-note', 0);
 });

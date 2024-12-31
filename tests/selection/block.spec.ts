@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import type { Page } from '@playwright/test';
+
 import { expect } from '@playwright/test';
 
 import {
@@ -8,13 +8,15 @@ import {
   copyByKeyboard,
   dragBetweenCoords,
   dragBetweenIndices,
+  dragEmbedResizeByTopLeft,
   enterPlaygroundRoom,
   focusRichText,
-  getCenterPosition,
   getIndexCoordinate,
+  getPageSnapshot,
   getRichTextBoundingBox,
   initEmptyParagraphState,
   initImageState,
+  initMultipleNoteWithParagraphState,
   initParagraphsByCount,
   initThreeLists,
   initThreeParagraphs,
@@ -40,7 +42,6 @@ import {
   assertAlmostEqual,
   assertBlockCount,
   assertRichTexts,
-  assertStoreMatchJSX,
 } from '../utils/asserts.js';
 import { test } from '../utils/playwright.js';
 
@@ -126,6 +127,24 @@ test('select all and delete by forwardDelete', async ({ page }) => {
   await focusRichText(page, 0);
   await type(page, 'abc');
   await assertRichTexts(page, ['abc']);
+});
+
+test('select all should work for multiple notes in doc mode', async ({
+  page,
+}) => {
+  const n = 4;
+  await enterPlaygroundRoom(page);
+  await initMultipleNoteWithParagraphState(page, undefined, n);
+
+  await focusRichText(page, 0);
+  await type(page, '123');
+  await focusRichText(page, 1);
+  await type(page, '456');
+  await selectAllByKeyboard(page);
+  await selectAllByKeyboard(page);
+  await selectAllByKeyboard(page);
+  const rects = page.locator('affine-block-selection').locator('visible=true');
+  await expect(rects).toHaveCount(n);
 });
 
 async function clickListIcon(page: Page, i = 0) {
@@ -234,11 +253,11 @@ test('selection on heavy page', async ({ page }) => {
       },
     }
   );
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(5);
 });
 
-test('should indent multi-selection block', async ({ page }) => {
+test('should indent multi-selection block', async ({ page }, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -255,44 +274,12 @@ test('should indent multi-selection block', async ({ page }) => {
 
   await page.keyboard.press('Tab');
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="456"
-        prop:type="text"
-      />
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}.json`
   );
 });
 
-test('should unindent multi-selection block', async ({ page }) => {
+test('should unindent multi-selection block', async ({ page }, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -309,40 +296,8 @@ test('should unindent multi-selection block', async ({ page }) => {
 
   await page.keyboard.press('Tab');
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="456"
-        prop:type="text"
-      />
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_init.json`
   );
 
   coord = await getIndexCoordinate(page, [1, 2]);
@@ -357,39 +312,8 @@ test('should unindent multi-selection block', async ({ page }) => {
 
   await pressShiftTab(page);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    />
-    <affine:paragraph
-      prop:text="456"
-      prop:type="text"
-    />
-    <affine:paragraph
-      prop:text="789"
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_final.json`
   );
 });
 
@@ -413,13 +337,13 @@ test('should keep selection state when scrolling backward', async ({
   await pressEnter(page);
   await type(page, '321');
 
-  const data = new Array(5).fill('');
-  data.unshift(...['123', '456', '789']);
-  data.push(...['987', '654', '321']);
+  const data = Array.from({ length: 5 }, () => '');
+  data.unshift('123', '456', '789');
+  data.push('987', '654', '321');
   await assertRichTexts(page, data);
 
-  const [viewport, container, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+  const [, container, distance] = await page.evaluate(() => {
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -440,12 +364,11 @@ test('should keep selection state when scrolling backward', async ({
   });
 
   await page.mouse.move(0, 0);
-
   await dragBetweenCoords(
     page,
     {
       x: container.right + 1,
-      y: viewport.height - 1,
+      y: container.bottom,
     },
     {
       x: container.right - 1,
@@ -461,14 +384,14 @@ test('should keep selection state when scrolling backward', async ({
   );
 
   const scrollTop = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
     return viewport.scrollTop;
   });
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(3 + 5 + 3);
   expect(scrollTop).toBe(0);
 });
@@ -490,13 +413,13 @@ test('should keep selection state when scrolling forward', async ({ page }) => {
   await pressEnter(page);
   await type(page, '321');
 
-  const data = new Array(5).fill('');
-  data.unshift(...['123', '456', '789']);
-  data.push(...['987', '654', '321']);
+  const data = Array.from({ length: 5 }, () => '');
+  data.unshift('123', '456', '789');
+  data.push('987', '654', '321');
   await assertRichTexts(page, data);
 
   const [viewport, container, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -520,7 +443,7 @@ test('should keep selection state when scrolling forward', async ({ page }) => {
     page,
     {
       x: container.right + 1,
-      y: 1,
+      y: container.top + 1,
     },
     {
       x: container.right - 1,
@@ -536,13 +459,13 @@ test('should keep selection state when scrolling forward', async ({ page }) => {
   );
 
   const scrollTop = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
     return viewport.scrollTop;
   });
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(3 + 5 + 3);
   // See https://jestjs.io/docs/expect#tobeclosetonumber-numdigits
   // Math.abs(scrollTop - distance) < Math.pow(10, -1 * -0.01)/2 = 0.511646496140377
@@ -568,13 +491,13 @@ test('should keep selection state when scrolling backward with the scroll wheel'
   await pressEnter(page);
   await type(page, '321');
 
-  const data = new Array(5).fill('');
-  data.unshift(...['123', '456', '789']);
-  data.push(...['987', '654', '321']);
+  const data = Array.from({ length: 5 }, () => '');
+  data.unshift('123', '456', '789');
+  data.push('987', '654', '321');
   await assertRichTexts(page, data);
 
   const [last, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -616,10 +539,10 @@ test('should keep selection state when scrolling backward with the scroll wheel'
   );
 
   // get count with scroll wheel
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
   const scrollTop0 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -629,7 +552,7 @@ test('should keep selection state when scrolling backward with the scroll wheel'
   await page.mouse.move(0, 0);
 
   await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -653,7 +576,7 @@ test('should keep selection state when scrolling backward with the scroll wheel'
   // get count with moving mouse
   const count1 = await rects.count();
   const scrollTop1 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -684,13 +607,13 @@ test('should keep selection state when scrolling forward with the scroll wheel',
   await pressEnter(page);
   await type(page, '321');
 
-  const data = new Array(5).fill('');
-  data.unshift(...['123', '456', '789']);
-  data.push(...['987', '654', '321']);
+  const data = Array.from({ length: 5 }, () => '');
+  data.unshift('123', '456', '789');
+  data.push('987', '654', '321');
   await assertRichTexts(page, data);
 
   const [first, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -730,10 +653,10 @@ test('should keep selection state when scrolling forward with the scroll wheel',
   );
 
   // get count with scroll wheel
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
   const scrollTop0 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -743,7 +666,7 @@ test('should keep selection state when scrolling forward with the scroll wheel',
   await page.mouse.move(0, 0);
 
   await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -766,7 +689,7 @@ test('should keep selection state when scrolling forward with the scroll wheel',
   // get count with moving mouse
   const count1 = await rects.count();
   const scrollTop1 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -797,7 +720,7 @@ test('should not clear selected rects when clicking on scrollbar', async ({
   await type(page, '321');
 
   const [viewport, first, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -834,10 +757,10 @@ test('should not clear selected rects when clicking on scrollbar', async ({
     }
   );
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
   const scrollTop0 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -848,7 +771,7 @@ test('should not clear selected rects when clicking on scrollbar', async ({
 
   const count1 = await rects.count();
   const scrollTop1 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -880,7 +803,7 @@ test('should not clear selected rects when scrolling the wheel', async ({
   await type(page, '321');
 
   const [viewport, first, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -917,7 +840,7 @@ test('should not clear selected rects when scrolling the wheel', async ({
     }
   );
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
 
   await page.mouse.wheel(viewport.right, -distance / 4);
@@ -932,11 +855,16 @@ test('should not clear selected rects when scrolling the wheel', async ({
   await waitNextFrame(page);
 
   const count2 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
-    return viewport.querySelectorAll('.selected,affine-block-selection').length;
+    const rects = viewport.querySelectorAll('affine-block-selection');
+    const visibleRects = Array.from(rects).filter(rect => {
+      const display = window.getComputedStyle(rect).display;
+      return display !== 'none';
+    });
+    return visibleRects.length;
   });
 
   expect(count0).toBe(count2);
@@ -961,7 +889,7 @@ test('should refresh selected rects when resizing the window/viewport', async ({
   await type(page, '321');
 
   const [viewport, first, distance] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -998,10 +926,10 @@ test('should refresh selected rects when resizing the window/viewport', async ({
     }
   );
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
   const scrollTop0 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -1024,7 +952,7 @@ test('should refresh selected rects when resizing the window/viewport', async ({
 
   const count1 = await rects.count();
   const scrollTop1 = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -1064,7 +992,7 @@ test('should clear block selection before native selection', async ({
     }
   );
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   const count0 = await rects.count();
 
   await dragBetweenIndices(
@@ -1099,7 +1027,7 @@ test('should not be misaligned when the editor container has padding or margin',
 
   // `123`, `789`
   const [first, last] = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport');
+    const viewport = document.querySelector('.affine-page-viewport');
     if (!viewport) {
       throw new Error();
     }
@@ -1132,7 +1060,7 @@ test('should not be misaligned when the editor container has padding or margin',
     }
   );
 
-  const rects = page.locator('.selected,affine-block-selection');
+  const rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(3);
 });
 
@@ -1154,7 +1082,9 @@ test('undo should clear block selection', async ({ page }) => {
   );
 
   await redoByKeyboard(page);
-  const selectedBlocks = page.locator('.selected,affine-block-selection');
+  const selectedBlocks = page
+    .locator('affine-block-selection')
+    .locator('visible=true');
   await expect(selectedBlocks).toHaveCount(1);
 
   await undoByKeyboard(page);
@@ -1163,7 +1093,7 @@ test('undo should clear block selection', async ({ page }) => {
 
 test('should not draw rect for sub selected blocks when entering tab key', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -1182,40 +1112,8 @@ test('should not draw rect for sub selected blocks when entering tab key', async
 
   await pressTab(page);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="456"
-        prop:type="text"
-      />
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}.json`
   );
 });
 
@@ -1246,9 +1144,7 @@ test('should not show option menu of image on block selection', async ({
   await initImageState(page);
   await activeEmbed(page);
 
-  await expect(
-    page.locator('.affine-embed-editing-state-container')
-  ).toHaveCount(1);
+  await expect(page.locator('.affine-image-toolbar-container')).toHaveCount(1);
 
   await pressEnter(page);
 
@@ -1271,91 +1167,32 @@ test('should not show option menu of image on block selection', async ({
 
   await page.waitForTimeout(50);
 
+  await expect(page.locator('.affine-image-toolbar-container')).toHaveCount(0);
   await expect(
-    page.locator('.affine-embed-editing-state-container')
-  ).toHaveCount(0);
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(1);
-});
-
-test('should be cleared when dragging block card from BlockHub', async ({
-  page,
-}) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyParagraphState(page);
-  await initThreeParagraphs(page);
-  await assertRichTexts(page, ['123', '456', '789']);
-
-  await selectAllByKeyboard(page);
-  await selectAllByKeyboard(page);
-  await selectAllByKeyboard(page);
-
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(3);
-
-  await page.click('.block-hub-menu-container [role="menuitem"]');
-  await page.waitForTimeout(200);
-  const blankMenu = '.block-hub-icon-container:nth-child(1)';
-
-  const blankMenuRect = await getCenterPosition(page, blankMenu);
-  const targetPos = await getCenterPosition(page, '[data-block-id="2"]');
-  await dragBetweenCoords(
-    page,
-    { x: blankMenuRect.x, y: blankMenuRect.y },
-    { x: targetPos.x, y: targetPos.y + 5 },
-    { steps: 50 }
-  );
-
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(0);
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(1);
 });
 
 test('click bottom of page and if the last is embed block, editor should insert a new editable block', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initImageState(page);
+  await activeEmbed(page);
+  await dragEmbedResizeByTopLeft(page);
 
-  const pageRect = await page.evaluate(() => {
-    const pageBlock = document.querySelector('.affine-doc-viewport');
-    if (!pageBlock) {
+  const hostRect = await page.evaluate(() => {
+    const host = document.querySelector('editor-host');
+    if (!host) {
       throw new Error("Can't find doc viewport");
     }
-    return pageBlock.getBoundingClientRect();
+    return host.getBoundingClientRect();
   });
 
-  await page
-    .locator('.affine-doc-viewport')
-    .click({ position: { x: pageRect.width / 2, y: pageRect.bottom - 10 } });
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:image
-      prop:caption=""
-      prop:height={0}
-      prop:index="a0"
-      prop:rotate={0}
-      prop:sourceId="ejImogf-Tb7AuKY-v94uz1zuOJbClqK-tWBxVr_ksGA="
-      prop:width={0}
-    />
-    <affine:paragraph
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+  await page.mouse.click(hostRect.x + hostRect.width / 2, hostRect.bottom - 10);
+
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}.json`
   );
 });
 
@@ -1367,7 +1204,9 @@ test('should select blocks when pressing escape', async ({ page }) => {
 
   await focusRichText(page, 2);
   await page.keyboard.press('Escape');
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(1);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(1);
   await page.keyboard.press('Escape');
 
   const cords = await getIndexCoordinate(page, [1, 2]);
@@ -1377,7 +1216,9 @@ test('should select blocks when pressing escape', async ({ page }) => {
   await page.mouse.up();
 
   await page.keyboard.press('Escape');
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(1);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(1);
 });
 
 test('should un-select blocks when pressing escape', async ({ page }) => {
@@ -1388,20 +1229,28 @@ test('should un-select blocks when pressing escape', async ({ page }) => {
 
   await focusRichText(page, 2);
   await pressEscape(page);
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(1);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(1);
 
   await pressEscape(page);
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(0);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(0);
 
   await focusRichText(page, 2);
   await pressEnter(page);
   await type(page, '-');
   await pressSpace(page);
   await clickListIcon(page, 0);
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(1);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(1);
 
   await pressEscape(page);
-  await expect(page.locator('.selected,affine-block-selection')).toHaveCount(0);
+  await expect(
+    page.locator('affine-block-selection').locator('visible=true')
+  ).toHaveCount(0);
 });
 
 test('verify cursor position after changing block type', async ({ page }) => {
@@ -1449,7 +1298,7 @@ test('should scroll page properly by wheel after inserting a new block and selec
   await type(page, 'new block');
 
   const lastBlockId = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport')!;
+    const viewport = document.querySelector('.affine-page-viewport')!;
     const container = viewport.querySelector(
       'affine-note .affine-block-children-container'
     );
@@ -1464,8 +1313,8 @@ test('should scroll page properly by wheel after inserting a new block and selec
   await clickBlockDragHandle(page, lastBlockId);
 
   async function getViewportScrollTop() {
-    return await page.evaluate(() => {
-      const viewport = document.querySelector('.affine-doc-viewport');
+    return page.evaluate(() => {
+      const viewport = document.querySelector('.affine-page-viewport');
       if (!viewport) {
         throw new Error();
       }
@@ -1480,7 +1329,7 @@ test('should scroll page properly by wheel after inserting a new block and selec
 
   // scroll to end by wheel
   const distanceToEnd = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport')!;
+    const viewport = document.querySelector('.affine-page-viewport')!;
     return viewport.scrollHeight - viewport.clientHeight;
   });
   await page.mouse.wheel(0, distanceToEnd * 2);
@@ -1506,7 +1355,7 @@ test('should not select parent block when dragging area only intersects with chi
   await page.mouse.move(coord.x + 20, coord.y + 50, { steps: 20 });
   await page.mouse.up();
 
-  let rects = page.locator('.selected,affine-block-selection');
+  let rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(2);
 
   // indent children blocks
@@ -1522,7 +1371,7 @@ test('should not select parent block when dragging area only intersects with chi
   await page.mouse.move(secondCoord.x + 100, secondCoord.y + 10, { steps: 20 });
   await page.mouse.up();
 
-  rects = page.locator('.selected,affine-block-selection');
+  rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(1);
 });
 
@@ -1535,8 +1384,8 @@ test('scroll should update dragging area and select blocks when dragging', async
 
   await page.mouse.click(0, 0);
   async function getViewportScrollTop() {
-    return await page.evaluate(() => {
-      const viewport = document.querySelector('.affine-doc-viewport');
+    return page.evaluate(() => {
+      const viewport = document.querySelector('.affine-page-viewport');
       if (!viewport) {
         throw new Error();
       }
@@ -1557,12 +1406,12 @@ test('scroll should update dragging area and select blocks when dragging', async
   await page.mouse.move(coord.x + 100, coord.y + 10, { steps: 40 });
   await waitNextFrame(page, 300);
 
-  let rects = page.locator('.selected,affine-block-selection');
+  let rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(2);
 
   // scroll to end by wheel
   const distanceToEnd = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-doc-viewport')!;
+    const viewport = document.querySelector('.affine-page-viewport')!;
     return viewport.scrollHeight - viewport.clientHeight;
   });
   await page.mouse.wheel(0, distanceToEnd * 2);
@@ -1571,6 +1420,6 @@ test('scroll should update dragging area and select blocks when dragging', async
 
   await page.mouse.up();
 
-  rects = page.locator('.selected,affine-block-selection');
+  rects = page.locator('affine-block-selection').locator('visible=true');
   await expect(rects).toHaveCount(3);
 });

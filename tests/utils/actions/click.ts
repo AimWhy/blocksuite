@@ -1,12 +1,11 @@
+import type { IPoint } from '@blocksuite/global/utils';
 import type { Page } from '@playwright/test';
 
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import type { IPoint } from '../../../packages/blocks/src/index.js';
 import { toViewCoord } from './edgeless.js';
 import { waitNextFrame } from './misc.js';
 
-function getDebugMenu(page: Page) {
-  const debugMenu = page.locator('debug-menu');
+export function getDebugMenu(page: Page) {
+  const debugMenu = page.locator('starter-debug-menu');
   return {
     debugMenu,
     undoBtn: debugMenu.locator('sl-tooltip[content="Undo"]'),
@@ -17,8 +16,13 @@ function getDebugMenu(page: Page) {
       name: 'Test Operations',
     }),
 
-    addNewPageBtn: debugMenu.locator('sl-tooltip[content="Add New Page"]'),
+    pagesBtn: debugMenu.getByTestId('docs-button'),
   };
+}
+
+export async function moveView(page: Page, point: [number, number]) {
+  const [x, y] = await toViewCoord(page, point);
+  await page.mouse.move(x, y);
 }
 
 export async function click(page: Page, point: IPoint) {
@@ -64,30 +68,33 @@ export async function addNoteByClick(page: Page) {
 }
 
 export async function addNewPage(page: Page) {
-  const { addNewPageBtn } = getDebugMenu(page);
-  await addNewPageBtn.click();
-  const pageMetas = await page.evaluate(() => {
-    const { workspace } = window;
-    return workspace.meta.pageMetas;
+  const { pagesBtn } = getDebugMenu(page);
+  if (!(await page.locator('docs-panel').isVisible())) {
+    await pagesBtn.click();
+  }
+  await page.locator('.new-doc-button').click();
+  const docMetas = await page.evaluate(() => {
+    const { collection: collection } = window;
+    return collection.meta.docMetas;
   });
-  if (!pageMetas.length) throw new Error('Add new page failed');
-  return pageMetas[pageMetas.length - 1];
+  if (!docMetas.length) throw new Error('Add new doc failed');
+  return docMetas[docMetas.length - 1];
 }
 
-export async function switchToPage(page: Page, pageId?: string) {
-  await page.evaluate(pageId => {
-    const { workspace, editor } = window;
+export async function switchToPage(page: Page, docId?: string) {
+  await page.evaluate(docId => {
+    const { collection: collection, editor } = window;
 
-    if (!pageId) {
-      const pageMetas = workspace.meta.pageMetas;
-      if (!pageMetas.length) return;
-      pageId = pageMetas[0].id;
+    if (!docId) {
+      const docMetas = collection.meta.docMetas;
+      if (!docMetas.length) return;
+      docId = docMetas[0].id;
     }
 
-    const page = workspace.getPage(pageId);
-    if (!page) return;
-    editor.page = page;
-  }, pageId);
+    const doc = collection.getDoc(docId);
+    if (!doc) return;
+    editor.doc = doc;
+  }, docId);
 }
 
 export async function clickTestOperationsMenuItem(page: Page, name: string) {
@@ -100,18 +107,18 @@ export async function clickTestOperationsMenuItem(page: Page, name: string) {
   await menuItem.waitFor({ state: 'hidden' }); // wait for animation ended
 }
 
-export async function switchReadonly(page: Page) {
-  page.evaluate(() => {
+export async function switchReadonly(page: Page, value = true) {
+  await page.evaluate(_value => {
     const defaultPage = document.querySelector(
-      'affine-doc-page'
+      'affine-page-root'
     ) as HTMLElement & {
-      page: {
+      doc: {
         awarenessStore: { setFlag: (key: string, value: unknown) => void };
       };
     };
-    const page = defaultPage.page;
-    page.awarenessStore.setFlag('readonly', { 'page:home': true });
-  });
+    const doc = defaultPage.doc;
+    doc.awarenessStore.setFlag('readonly', { 'doc:home': _value });
+  }, value);
 }
 
 export async function activeEmbed(page: Page) {

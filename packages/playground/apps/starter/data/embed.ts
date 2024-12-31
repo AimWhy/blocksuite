@@ -1,43 +1,52 @@
-import { Text, type Workspace } from '@blocksuite/store';
+import { type DocCollection, Text } from '@blocksuite/store';
 
-import { type InitFn } from './utils';
+import type { InitFn } from './utils.js';
 
-export const embed: InitFn = async (workspace: Workspace, id: string) => {
-  const page = workspace.getPage(id) ?? workspace.createPage({ id });
-  page.clear();
+export const embed: InitFn = (collection: DocCollection, id: string) => {
+  const doc = collection.getDoc(id) ?? collection.createDoc({ id });
+  doc.clear();
 
-  await page.load(() => {
-    // Add page block and surface block at root level
-    const pageBlockId = page.addBlock('affine:page', {
+  doc.load(() => {
+    // Add root block and surface block at root level
+    const rootId = doc.addBlock('affine:page', {
       title: new Text(),
     });
 
-    const surfaceId = page.addBlock('affine:surface', {}, pageBlockId);
+    const surfaceId = doc.addBlock('affine:surface', {}, rootId);
 
-    // Add note block inside page block
-    const noteId = page.addBlock('affine:note', {}, pageBlockId);
+    // Add note block inside root block
+    const noteId = doc.addBlock('affine:note', {}, rootId);
     // Add paragraph block inside note block
-    page.addBlock('affine:paragraph', {}, noteId);
+    doc.addBlock('affine:paragraph', {}, noteId);
 
-    page.addBlock(
-      'affine:embed:github',
-      { owner: 'toeverything', repo: 'blocksuite' },
+    doc.addBlock(
+      'affine:embed-github',
+      {
+        url: 'https://github.com/toeverything/AFFiNE/pull/5453',
+      },
       noteId
     );
-    page.addBlock(
-      'affine:embed:github',
-      { owner: 'toeverything', repo: 'affine', xywh: '[0, 400, 400, 200]' },
+    doc.addBlock(
+      'affine:embed-github',
+      {
+        url: 'https://www.github.com/toeverything/blocksuite/pull/5927',
+        style: 'vertical',
+        xywh: '[0, 400, 364, 390]',
+      },
       surfaceId
     );
-    page.addBlock(
-      'affine:embed:github',
-      { owner: 'milkdown', repo: 'milkdown', xywh: '[0, 700, 400, 200]' },
+    doc.addBlock(
+      'affine:embed-github',
+      {
+        url: 'https://github.com/Milkdown/milkdown/pull/1215',
+        xywh: '[500, 400, 752, 116]',
+      },
       surfaceId
     );
-    page.addBlock('affine:paragraph', {}, noteId);
+    doc.addBlock('affine:paragraph', {}, noteId);
   });
 
-  page.resetHistory();
+  doc.resetHistory();
 };
 
 embed.id = 'embed';

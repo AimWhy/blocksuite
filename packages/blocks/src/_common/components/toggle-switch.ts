@@ -1,12 +1,12 @@
 import { css, html, LitElement } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { property } from 'lit/decorators.js';
 
 const styles = css`
   :host {
     display: flex;
   }
 
-  input[type='checkbox'] {
+  .switch {
     height: 0;
     width: 0;
     visibility: hidden;
@@ -35,14 +35,14 @@ const styles = css`
     background: var(--affine-white);
     border: 1px solid var(--affine-black-10);
     border-radius: 16px;
-    transition: 0.4s;
+    transition: 0.1s;
   }
 
-  input:checked + label {
+  label.on {
     background: var(--affine-primary-color);
   }
 
-  input:checked + label:after {
+  label.on:after {
     left: calc(100% - 1px);
     transform: translateX(-100%);
   }
@@ -55,12 +55,6 @@ const styles = css`
 export class ToggleSwitch extends LitElement {
   static override styles = styles;
 
-  @state()
-  on = false;
-
-  @property({ attribute: false })
-  onChange?: (on: boolean) => void;
-
   private _toggleSwitch() {
     this.on = !this.on;
     if (this.onChange) {
@@ -70,15 +64,22 @@ export class ToggleSwitch extends LitElement {
 
   override render() {
     return html`
-      <input
-        type="checkbox"
-        id="switch"
-        ?checked=${this.on}
-        @change=${this._toggleSwitch}
-      />
-      <label for="switch"></label>
+      <label class=${this.on ? 'on' : ''}>
+        <input
+          type="checkbox"
+          class="switch"
+          ?checked=${this.on}
+          @change=${this._toggleSwitch}
+        />
+      </label>
     `;
   }
+
+  @property({ attribute: false })
+  accessor on = false;
+
+  @property({ attribute: false })
+  accessor onChange: ((on: boolean) => void) | undefined = undefined;
 }
 
 declare global {

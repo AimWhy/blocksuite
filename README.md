@@ -1,5 +1,11 @@
 # BlockSuite
 
+> [!WARNING]
+> This repository will undergo major changes, so we will suspend accepting PRs.
+>
+> Read more:
+> https://github.com/toeverything/blocksuite/issues/9045
+
 <p align="center">
   <picture style="width: 500px">
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/toeverything/blocksuite/master/assets/logo-and-name-h.svg" />
@@ -8,62 +14,117 @@
   </picture>
 </p>
 
+<!--
 [![Codecov](https://codecov.io/gh/toeverything/blocksuite/branch/master/graph/badge.svg?token=T86JYCDSMN)](https://codecov.io/gh/toeverything/blocksuite)
+-->
+
 [![Checks Status](https://img.shields.io/github/checks-status/toeverything/blocksuite/master)](https://github.com/toeverything/blocksuite/actions?query=branch%3Amaster)
 [![Issues Closed](https://img.shields.io/github/issues-closed/toeverything/blocksuite?color=6880ff)](https://github.com/toeverything/blocksuite/issues?q=is%3Aissue+is%3Aclosed)
-[![NPM Latest Release](https://img.shields.io/npm/v/@blocksuite/store.svg?maxAge=300&color=6880ff)](./packages/store/package.json)
-[![NPM Nightly Release](https://img.shields.io/npm/v/@blocksuite/editor/nightly?color=6880ff)](https://github.com/toeverything/blocksuite/actions/workflows/nightly-release.yml?query=branch%3Amaster)
+[![NPM Latest Release](https://img.shields.io/npm/v/@blocksuite/store.svg?maxAge=300&color=6880ff)](./packages/framework/store/package.json)
+[![NPM Canary Release](https://img.shields.io/npm/v/@blocksuite/presets/canary?color=6880ff)](https://github.com/toeverything/blocksuite/actions/workflows/canary-release.yml?query=branch%3Amaster)
 [![Open in StackBlitz](https://img.shields.io/badge/open%20in-StackBlitz-black)](https://stackblitz.com/github/toeverything/blocksuite)
 [![Join Discord](https://img.shields.io/discord/959027316334407691)](https://discord.gg/9vwSWmYYcZ)
+[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20BlockSuite%20Guru-006BFF)](https://gurubase.io/g/blocksuite)
 
 ---
 
 ## Overview
 
-BlockSuite is an open-source project for block-based collaborative editing. This repository contains two essential parts:
+> _People who are really serious about editor should make their own framework._
 
-- **A framework** for building block-based [structure editors](https://en.wikipedia.org/wiki/Structure_editor), providing foundational support for editor essentials such as [block schema](https://blocksuite.affine.pro/block-schema.html), [selection](https://blocksuite.affine.pro/selection-api.html), [rich text](https://github.com/toeverything/blocksuite/tree/master/packages/virgo), [real-time collaboration](https://blocksuite.affine.pro/unidirectional-data-flow.html), and [UI component definition](https://blocksuite.affine.pro/block-view.html).
-- **Multiple first-party editors** capable of handling documents, whiteboards, and data grids. These editors are highly interoperable, and are already used by the [AFFiNE](https://github.com/toeverything/AFFiNE) project.
+BlockSuite is a toolkit for building editors and collaborative applications. It implements a series of content editing infrastructures, UI components and editors independently.
 
-By using BlockSuite, you can:
+You can consider BlockSuite as a [UI component library](https://blocksuite.io/components/overview.html) for building various editors, based on a minimized vanilla framework as their runtime. With BlockSuite, you can:
 
-- Reuse and extend block-based editors, like [document editor](https://try-blocksuite.vercel.app/starter/?init) and [whiteboard editor](https://try-blocksuite.vercel.app/).
-- Define custom blocks that could be shared across these editors.
-- Synchronize editor states over different providers (`IndexedDB`, `WebSocket`, `BroadcastChannel`, etc.) while automatically resolving merge conflicts.
-- Support document snapshot, clipboard, and interoperability with third-party formats through a universal data transforming model.
-- Fully construct your own block-based editor from scratch.
+- Reuse multiple first-party BlockSuite editors:
+  - [**`PageEditor`**](https://blocksuite.io/components/editors/page-editor.html): A comprehensive block-based document editor, offering extensive customization and flexibility.
+  - [**`EdgelessEditor`**](https://blocksuite.io/components/editors/edgeless-editor.html): A graphics editor with opt-in canvas rendering support, but also shares the same rich-text capabilities with the `PageEditor`.
+- Customize, extend and enhance these editors with a rich set of [BlockSuite components](https://blocksuite.io/components/overview.html) and [examples](./examples/). All BlockSuite components (including editors) are native web components, making them framework-agnostic and easy to interop with popular frameworks.
+- Or, build new editors from scratch based on the underlying vanilla framework.
 
-The major packages in BlockSuite include the following:
+> 🚧 BlockSuite is currently in its early stage, with components and extension capabilities still under refinement. Hope you can stay tuned, try it out, or share your feedback!
 
-- `@blocksuite/store`: CRDT-driven block state management, enabling editors to have built-in conflict resolution and time travel capabilities.
-- `@blocksuite/block-std`: The standard toolkit for working with editable blocks, including selections, events, services, commands and more.
-- `@blocksuite/lit`: The default view layer for rendering blocks and widgets as [web components](https://developer.mozilla.org/en-US/docs/Web/API/Web_components). It's built on top of [lit](https://lit.dev/) and the headless `block-std`, and could be replaced by alternative frameworks.
-- `@blocksuite/virgo`: Atomic rich text _component_ used in BlockSuite. Every editable block could hold its own virgo instances, leveraging the store to reconcile the block tree.
-- `@blocksuite/blocks`: Editable first-party blocks under the `affine` scope. The default AFFiNE editors are simply different implementations of the `affine:page` blocks.
-- `@blocksuite/editor`: The ready-to-use editors composed by blocks.
-- `@blocksuite/playground`: Default editor playground with local-first data persistence and real-time collaboration support.
+## Motivation
 
-## Why BlockSuite?
+BlockSuite originated from the [AFFiNE](https://github.com/toeverything/AFFiNE) knowledge base, with design goals including:
 
-- 🧬 **CRDT-Native Collaboration**: At the heart of BlockSuite is its native use of CRDTs ([Conflict-free Replicated Data Types](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type)) as the single source of truth for data flow. This design sets it apart from traditional editors that often graft on real-time collaboration. By integrating CRDTs at its core, BlockSuite inherently supports advanced features like time travel (undo/redo) and automatic conflict resolution. This means smoother, more reliable collaborative editing without the need for additional layers or complex integrations.
-- 🧩 **Rich Text Orchestration Across Blocks**: BlockSuite diverges from the conventional monolithic rich text edit model. It enables each block to support its own atomic rich text component. This allows for granular control and flexibility in editing, which is especially powerful in complex documents where different sections require varied formatting and features.
-- 🎨 **Reusable Blocks Across Editors**: BlockSuite provides great interoperability of custom blocks across different editor types (document, whiteboard, etc.). This allows for a more consistent and efficient use of blocks, simplifying the development process by enabling the same block to function seamlessly in various editing environments.
-- 🔌 **Plug-and-Play Data Synchronization**: BlockSuite simplifies data synchronization with its provider-based approach. Connecting an editor instance to a provider automatically enables data synchronization. It supports incremental data sync, meaning only the changes are transmitted, enhancing efficiency and performance. It eliminates the need for explicit requests or complex synchronization logic, streamlining DX and ensuring data consistency across collaborative environments.
+- **Support for Multimodal Editable Content**: When considering knowledge as a single source of truth, building its various view modes (e.g., text, slides, mind maps, tables) still requires multiple incompatible frameworks. Ideally, no matter how the presentation of content changes, there should be a consistent framework that helps.
+- **Organizing and Visualizing Complex Knowledge**: Existing editors generally focus on editing single documents, but often fall short in dealing with complex structures involving intertwined references. This requires the framework to natively manage state across multiple documents.
+- **Collaboration-Ready**: Real-time collaboration is often seen as an optional plugin, but in reality, we could natively use the underlying CRDT technology for editor state management, which helps to build a [clearer and more reliable data flow](https://blocksuite.io/blog/crdt-native-data-flow.html).
 
-> 🚧 BlockSuite is currently in beta, with some extension capabilities still under refinement. Hope you can stay tuned, try it out, or share your feedback!
+During the development of AFFiNE, it became clear that BlockSuite was advancing beyond merely being an in-house editor and evolving into a versatile framework. That's why we chose to open source and maintain BlockSuite independently.
 
-## Getting Started
+<!-- ## Examples -->
 
-To learn how to start using BlockSuite, visit [blocksuite.affine.pro](https://blocksuite.affine.pro/quick-start.html).
+## Features
+
+With BlockSuite editors, you can selectively reuse all the editing features in [AFFiNE](https://affine.pro/):
+
+[![affine-demo](./packages/docs/images/affine-demo.jpg)](https://affine.pro)
+
+And under the hood, the vanilla BlockSuite framework supports:
+
+- Defining [custom blocks](https://blocksuite.io/guide/working-with-block-tree.html#defining-new-blocks) and inline embeds.
+- Incremental updates, [real-time collaboration](https://github.com/toeverything/blocksuite/blob/master/BUILDING.md#test-collaboration), and even decentralized data synchronization based on the [document streaming](https://blocksuite.io/guide/data-synchronization.html#document-streaming) mechanism of the document.
+- Writing type-safe complex editing logic based on the [command](https://blocksuite.io/guide/command.html) mechanism, similar to react hooks designed for document editing.
+- Persistence of documents and compatibility with various third-party formats (such as markdown and HTML) based on block [snapshot](https://blocksuite.io/guide/data-synchronization.html#snapshot-api) and transformer.
+- State scheduling across multiple documents and reusing one document in multiple editors.
+
+To try out BlockSuite, refer to the [quick start](https://blocksuite.io/guide/quick-start.html) example and start with the preset editors in `@blocksuite/presets`.
+
+## Architecture
+
+The relationship between BlockSuite and AFFiNE is similar to that between the [Monaco Editor](https://github.com/microsoft/monaco-editor) and [VSCode](https://code.visualstudio.com/), but with one major difference: BlockSuite is not automatically generated based on the AFFiNE codebase, but is maintained independently with a different tech stack — AFFiNE uses React while BlockSuite uses [web components](https://developer.mozilla.org/en-US/docs/Web/API/Web_components).
+
+This difference has led BlockSuite to set clear boundaries based on a component-centric philosophy, ensuring:
+
+- Both AFFiNE and other projects should equally reuse and extend BlockSuite through components, without any privileges.
+- BlockSuite components can be easily reused regardless of whether you are using React or other frameworks.
+
+To that end, the BlockSuite project is structured around key packages that are categorized into two groups: a headless [framework](https://github.com/toeverything/blocksuite/tree/master/packages/framework) and prebuilt editing components.
+
+<table>
+  <tr>
+    <th colspan="2">Framework</th>
+  </tr>
+  <tr>
+    <td><code>@blocksuite/store</code></td>
+    <td>Data layer for modeling collaborative document states. It is natively built on the CRDT library <a href="https://github.com/yjs/yjs">Yjs</a>, powering all BlockSuite documents with built-in real-time collaboration and time-travel capabilities.</td>
+  </tr>
+  <tr>
+    <td><code>@blocksuite/inline</code></td>
+    <td>Minimal rich text components for inline editing. BlockSuite allows spliting rich text content in different block nodes into different inline editors, making complex content conveniently composable. <strong>This significantly reduces the complexity required to implement traditional rich text editing features.</strong></td>
+  </tr>
+  <tr>
+    <td><code>@blocksuite/block-std</code></td>
+    <td>Framework-agnostic library for modeling editable blocks. Its capabilities cover the structure of block fields, events, selection, clipboard support, etc.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">Components</th>
+  </tr>
+  <tr>
+    <td><code>@blocksuite/blocks</code></td>
+    <td>Default block implementations for composing preset editors, including widgets belonging to each block.</td>
+  </tr>
+  <tr>
+    <td><code>@blocksuite/presets</code></td>
+    <td>Plug-and-play editable components including <i>editors</i> (<code>PageEditor</code> / <code>EdgelessEditor</code>) and auxiliary UI components named <i>fragments</i> (<code>CopilotPanel</code>, <code>DocTitle</code>...).</td>
+  </tr>
+</table>
 
 ## Resources
 
-- 🎁 Examples
-  - [Nightly Playground](https://try-blocksuite.vercel.app/starter/?init)
-  - [The `SimpleAffineEditor` Example](https://try-blocksuite.vercel.app/examples/basic/)
-  - [BlockSuite Monorepo in StackBlitz](https://stackblitz.com/github/toeverything/blocksuite)
+- 🚚 Resources
+  - [Canary Playground](https://try-blocksuite.vercel.app/starter/?init)
+  - [Examples](./examples/)
+  - [BlockSuite in StackBlitz](https://stackblitz.com/github/toeverything/blocksuite)
+  - [Testing Real-Time Collaboration](https://github.com/toeverything/blocksuite/blob/master/BUILDING.md#test-collaboration)
+  - [BlockSuite Ecosystem CI](https://github.com/toeverything/blocksuite-ecosystem-ci)
   - [Vue-based BlocksVite Editor](https://github.com/zuozijian3720/blocksvite)
-- 📝 [Documentation](https://blocksuite.affine.pro/quick-start.html)
+- 📝 [Documentation](https://blocksuite.io/guide/overview.html)
 - 📍 [Good First Issues](https://github.com/toeverything/blocksuite/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 - 🎙️ [GitHub Discussions](https://github.com/toeverything/blocksuite/discussions)
 - 💬 [Discord Channel](https://discord.gg/9vwSWmYYcZ)
@@ -71,7 +132,7 @@ To learn how to start using BlockSuite, visit [blocksuite.affine.pro](https://bl
 
 ## Building
 
-See [BUILDING.md](BUILDING.md) for instructions on how to build BlockSuite from source code.
+See [BUILDING.md](BUILDING.md) for instructions on how to build and test BlockSuite from source.
 
 ## Contributing
 

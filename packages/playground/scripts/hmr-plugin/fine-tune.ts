@@ -1,8 +1,9 @@
+import type { Plugin } from 'vite';
+
 import { init, parse } from 'es-module-lexer';
 import MagicString from 'magic-string';
 import micromatch from 'micromatch';
-import path from 'path';
-import type { Plugin } from 'vite';
+import path from 'node:path';
 const isMatch = micromatch.isMatch;
 
 export function fineTuneHmr({
@@ -22,7 +23,7 @@ export function fineTuneHmr({
     async configureServer() {
       await init;
     },
-    transform: async (code, id, options) => {
+    transform: (code, id) => {
       // only handle js/ts files
       const includeGlob = include.map(i => path.resolve(root, i));
       const excludeGlob = exclude.map(i => path.resolve(root, i));
@@ -37,7 +38,7 @@ export function fineTuneHmr({
         const modules = imports.map(i => i.n);
         const modulesEndsWithTs = modules
           .filter(Boolean)
-          .map(m => m.replace(/\.js$/, '.ts'));
+          .map(m => m!.replace(/\.js$/, '.ts'));
         const preamble = `
           if (import.meta.hot) {
             import.meta.hot.accept(${JSON.stringify(
@@ -55,6 +56,7 @@ export function fineTuneHmr({
           map: s.generateMap({ hires: true, source: id, includeContent: true }),
         };
       }
+      return;
     },
   };
 

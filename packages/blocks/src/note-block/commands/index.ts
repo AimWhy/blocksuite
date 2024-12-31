@@ -1,21 +1,41 @@
-import type { BlockElement } from '@blocksuite/lit';
+import type { BlockCommands } from '@blocksuite/block-std';
 
-export * from './change-text-selection-sideways.js';
-export * from './change-text-selection-sideways-to-block.js';
-export * from './change-text-selection-to-block-start-end.js';
-export * from './change-text-selection-vertically.js';
-export * from './move-cursor-to-block.js';
-export * from './move-cursor-vertically.js';
-export * from './select-block.js';
-export * from './select-block-text-by-side.js';
-export * from './select-blocks-between.js';
+import {
+  getBlockIndexCommand,
+  getBlockSelectionsCommand,
+  getNextBlockCommand,
+  getPrevBlockCommand,
+  getSelectedBlocksCommand,
+} from '@blocksuite/affine-shared/commands';
 
-declare global {
-  namespace BlockSuite {
-    interface CommandData {
-      focusBlock?: BlockElement | null;
+import { updateBlockType } from './block-type.js';
+import { dedentBlock } from './dedent-block.js';
+import { dedentBlockToRoot } from './dedent-block-to-root.js';
+import { dedentBlocks } from './dedent-blocks.js';
+import { dedentBlocksToRoot } from './dedent-blocks-to-root.js';
+import { focusBlockEnd } from './focus-block-end.js';
+import { focusBlockStart } from './focus-block-start.js';
+import { indentBlock } from './indent-block.js';
+import { indentBlocks } from './indent-blocks.js';
+import { selectBlock } from './select-block.js';
+import { selectBlocksBetween } from './select-blocks-between.js';
 
-      anchorBlock?: BlockElement | null;
-    }
-  }
-}
+export const commands: BlockCommands = {
+  // block
+  getBlockIndex: getBlockIndexCommand,
+  getPrevBlock: getPrevBlockCommand,
+  getNextBlock: getNextBlockCommand,
+  getSelectedBlocks: getSelectedBlocksCommand,
+  getBlockSelections: getBlockSelectionsCommand,
+  selectBlock,
+  selectBlocksBetween,
+  focusBlockStart,
+  focusBlockEnd,
+  updateBlockType,
+  indentBlock,
+  dedentBlock,
+  indentBlocks,
+  dedentBlocks,
+  dedentBlockToRoot,
+  dedentBlocksToRoot,
+};

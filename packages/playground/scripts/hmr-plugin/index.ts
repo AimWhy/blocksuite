@@ -1,11 +1,10 @@
 import path from 'node:path';
-
 import {
-  hmrPlugin as wcHmrPlugin,
   presets,
+  hmrPlugin as wcHmrPlugin,
 } from 'vite-plugin-web-components-hmr';
 
-import { fineTuneHmr } from './fine-tune';
+import { fineTuneHmr } from './fine-tune.js';
 
 const customLitPath = path.resolve(
   __dirname,

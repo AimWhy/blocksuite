@@ -1,103 +1,72 @@
-import type { Page } from '@playwright/test';
-import { expect } from '@playwright/test';
-import { addNewPage, switchToPage } from 'utils/actions/click.js';
-import { dragBetweenIndices } from 'utils/actions/drag.js';
+import { expect, type Page } from '@playwright/test';
+import { switchEditorMode } from 'utils/actions/edgeless.js';
+import { getLinkedDocPopover } from 'utils/actions/linked-doc.js';
+
+import {
+  addNewPage,
+  getDebugMenu,
+  switchToPage,
+} from './utils/actions/click.js';
+import { dragBetweenIndices, dragBlockToPoint } from './utils/actions/drag.js';
 import {
   copyByKeyboard,
+  cutByKeyboard,
   pasteByKeyboard,
+  pressArrowLeft,
   pressArrowRight,
   pressBackspace,
   pressEnter,
   redoByKeyboard,
   selectAllByKeyboard,
+  SHORT_KEY,
   type,
   undoByKeyboard,
-} from 'utils/actions/keyboard.js';
+} from './utils/actions/keyboard.js';
 import {
   captureHistory,
   enterPlaygroundRoom,
   focusRichText,
   focusTitle,
+  getPageSnapshot,
+  initEmptyEdgelessState,
   initEmptyParagraphState,
+  setInlineRangeInSelectedRichText,
   waitNextFrame,
-} from 'utils/actions/misc.js';
+} from './utils/actions/misc.js';
 import {
+  assertExists,
+  assertParentBlockFlavour,
   assertRichTexts,
   assertStoreMatchJSX,
   assertTitle,
-} from 'utils/asserts.js';
-
+} from './utils/asserts.js';
 import { test } from './utils/playwright.js';
 
-function getLinkedPagePopover(page: Page) {
-  const REFERENCE_NODE = ' ' as const;
-  const refNode = page.locator('affine-reference');
-  const linkedPagePopover = page.locator('.linked-page-popover');
-  const pageBtn = linkedPagePopover.locator('.group > icon-button');
+async function createAndConvertToEmbedLinkedDoc(page: Page) {
+  const { createLinkedDoc } = getLinkedDocPopover(page);
+  const linkedDoc = await createLinkedDoc('page1');
+  const lickedDocBox = await linkedDoc.boundingBox();
+  assertExists(lickedDocBox);
+  await page.mouse.move(
+    lickedDocBox.x + lickedDocBox.width / 2,
+    lickedDocBox.y + lickedDocBox.height / 2
+  );
 
-  const findRefNode = async (title: string) => {
-    const refNode = page.locator(`affine-reference`, {
-      has: page.locator(`.affine-reference-title[data-title="${title}"]`),
-    });
-    await expect(refNode).toBeVisible();
-    return refNode;
-  };
-  const assertExistRefText = async (text: string) => {
-    await expect(refNode).toBeVisible();
-    const refTitleNode = refNode.locator('.affine-reference-title');
-    // Since the text is in the pseudo element
-    // we need to use `toHaveAttribute` to assert it.
-    // And it's not a good strict way to assert the text.
-    await expect(refTitleNode).toHaveAttribute('data-title', text);
-  };
+  await waitNextFrame(page, 200);
+  const referencePopup = page.locator('.affine-reference-popover-container');
+  await expect(referencePopup).toBeVisible();
 
-  const createPage = async (
-    pageType: 'LinkedPage' | 'Subpage',
-    pageName?: string
-  ) => {
-    await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
-    if (pageName) {
-      await type(page, pageName);
-    } else {
-      pageName = 'Untitled';
-    }
+  const switchButton = page.getByRole('button', { name: 'Switch view' });
+  await switchButton.click();
 
-    await page.keyboard.press('ArrowUp');
-    if (pageType === 'LinkedPage') {
-      await page.keyboard.press('ArrowUp');
-    }
-    await pressEnter(page);
-    return findRefNode(pageName);
-  };
-
-  const assertActivePageIdx = async (idx: number) => {
-    if (idx !== 0) {
-      await expect(pageBtn.nth(0)).not.toHaveAttribute('hover', '');
-    }
-    await expect(pageBtn.nth(idx)).toHaveAttribute('hover', '');
-  };
-
-  return {
-    REFERENCE_NODE,
-    linkedPagePopover,
-    refNode,
-    pageBtn,
-
-    findRefNode,
-    assertExistRefText,
-    createLinkedPage: async (pageName?: string) =>
-      createPage('LinkedPage', pageName),
-    /**
-     * @deprecated
-     */
-    createSubpage: async (pageName?: string) => createPage('Subpage', pageName),
-    assertActivePageIdx,
-  };
+  const embedLinkedDocBtn = page.getByRole('button', { name: 'Card view' });
+  await expect(embedLinkedDocBtn).toBeVisible();
+  await embedLinkedDocBtn.click();
+  await waitNextFrame(page, 200);
 }
 
 test.describe('multiple page', () => {
-  test('should create and switch page work', async ({ page }) => {
+  test('should create and switch page work', async ({ page }, testInfo) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
     await focusTitle(page);
@@ -106,32 +75,9 @@ test.describe('multiple page', () => {
     await type(page, 'page0');
     await assertRichTexts(page, ['page0']);
 
-    const page1Snapshot = `
-<affine:page
-  prop:title="title0"
->
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="page0"
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`;
-    await assertStoreMatchJSX(page, page1Snapshot);
+    expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+      `${testInfo.title}_init.json`
+    );
 
     const { id } = await addNewPage(page);
     await switchToPage(page, id);
@@ -141,43 +87,15 @@ test.describe('multiple page', () => {
     await type(page, 'page1');
     await assertRichTexts(page, ['page1']);
 
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:page
-  prop:title="title1"
->
-  <affine:surface />
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="page1"
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
-    );
-
     await switchToPage(page);
-    await assertStoreMatchJSX(page, page1Snapshot);
+    expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+      `${testInfo.title}_final.json`
+    );
   });
 });
 
 test.describe('reference node', () => {
-  test('linked page popover can show and hide correctly', async ({ page }) => {
+  test('linked doc popover can show and hide correctly', async ({ page }) => {
     await enterPlaygroundRoom(page);
     const { paragraphId } = await initEmptyParagraphState(page);
     await focusRichText(page);
@@ -188,20 +106,38 @@ test.describe('reference node', () => {
       page,
       `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text="@"
   prop:type="text"
 />`,
       paragraphId
     );
-    const { linkedPagePopover } = getLinkedPagePopover(page);
-    await expect(linkedPagePopover).toBeVisible();
+    const { linkedDocPopover } = getLinkedDocPopover(page);
+    await expect(linkedDocPopover).toBeVisible();
     await pressArrowRight(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
     await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await assertRichTexts(page, ['@@']);
     await pressBackspace(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
+  });
+
+  test('linked doc popover should not show when the current content is @xx and pressing backspace', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusRichText(page);
+    await type(page, '@');
+    await page.keyboard.press('Escape');
+    await type(page, 'a');
+
+    const { linkedDocPopover } = getLinkedDocPopover(page);
+    await expect(linkedDocPopover).toBeHidden();
+
+    await pressBackspace(page);
+    await expect(linkedDocPopover).toBeHidden();
   });
 
   test('should reference node attributes correctly', async ({ page }) => {
@@ -216,6 +152,7 @@ test.describe('reference node', () => {
       page,
       `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text={
     <>
       <text
@@ -239,13 +176,14 @@ test.describe('reference node', () => {
       page,
       `
 <affine:paragraph
+  prop:collapsed={false}
   prop:type="text"
 />`,
       paragraphId
     );
   });
 
-  test('should reference node can be seleted', async ({ page }) => {
+  test('should reference node can be selected', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
     await addNewPage(page);
@@ -298,6 +236,7 @@ test.describe('reference node', () => {
 
     const snapshot = `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text={
     <>
       <text
@@ -367,6 +306,7 @@ test.describe('reference node', () => {
 
     const snapshot = `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text={
     <>
       <text
@@ -432,6 +372,7 @@ test.describe('reference node', () => {
 
     const snapshot = `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text={
     <>
       <text
@@ -462,6 +403,7 @@ test.describe('reference node', () => {
       page,
       `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text="1432"
   prop:type="text"
 />`,
@@ -474,6 +416,7 @@ test.describe('reference node', () => {
       page,
       `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text="1432"
   prop:type="text"
 />`,
@@ -484,7 +427,7 @@ test.describe('reference node', () => {
   test('should create reference node works', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
-    const defaultPageId = 'page:home';
+    const defaultPageId = 'doc:home';
     const { id: newId } = await addNewPage(page);
     await switchToPage(page, newId);
     await focusTitle(page);
@@ -494,13 +437,13 @@ test.describe('reference node', () => {
     await focusRichText(page);
     await type(page, '@');
     const {
-      linkedPagePopover,
+      linkedDocPopover,
       refNode,
       assertExistRefText: assertReferenceText,
-    } = getLinkedPagePopover(page);
-    await expect(linkedPagePopover).toBeVisible();
+    } = getLinkedDocPopover(page);
+    await expect(linkedDocPopover).toBeVisible();
     await pressEnter(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
     await assertRichTexts(page, [' ']);
     await expect(refNode).toBeVisible();
     await expect(refNode).toHaveCount(1);
@@ -514,45 +457,20 @@ test.describe('reference node', () => {
     await assertReferenceText('titl1');
   });
 
-  test('can create linked page and jump', async ({ page }) => {
+  test('can create linked page and jump', async ({ page }, testInfo) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
     await focusTitle(page);
     await type(page, 'page0');
 
     await focusRichText(page);
-    const { createLinkedPage, findRefNode } = getLinkedPagePopover(page);
-    const linkedNode = await createLinkedPage('page1');
+    const { createLinkedDoc, findRefNode } = getLinkedDocPopover(page);
+    const linkedNode = await createLinkedDoc('page1');
     await linkedNode.click();
 
     await assertTitle(page, 'page1');
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:page
-  prop:title="page1"
->
-  <affine:surface />
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+    expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+      `${testInfo.title}_init.json`
     );
     await focusRichText(page);
     await type(page, '@page0');
@@ -560,45 +478,8 @@ test.describe('reference node', () => {
     const refNode = await findRefNode('page0');
     await refNode.click();
     await assertTitle(page, 'page0');
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:page
-  prop:title="page0"
->
-  <affine:note
-    prop:background="--affine-background-secondary-color"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 8,
-          "borderSize": 4,
-          "borderStyle": "solid",
-          "shadowType": "--affine-note-shadow-box",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text={
-        <>
-          <text
-            insert=" "
-            reference={
-              Object {
-                "pageId": "3",
-                "type": "LinkedPage",
-              }
-            }
-          />
-        </>
-      }
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+    expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+      `${testInfo.title}_final.json`
     );
   });
 
@@ -617,7 +498,7 @@ test.describe('reference node', () => {
     await type(page, '[[');
     await pressEnter(page);
 
-    const { refNode } = getLinkedPagePopover(page);
+    const { refNode } = getLinkedDocPopover(page);
     await assertRichTexts(page, ['  ']);
     await expect(refNode).toHaveCount(2);
   });
@@ -628,38 +509,38 @@ test.describe('linked page popover', () => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
     await focusRichText(page);
-    const { linkedPagePopover } = getLinkedPagePopover(page);
+    const { linkedDocPopover } = getLinkedDocPopover(page);
 
     await type(page, '[[');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await pressBackspace(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
 
     await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
 
     await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await page.keyboard.press('ArrowRight');
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
 
     await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await copyByKeyboard(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
   });
 
   test('should fuzzy search works', async ({ page }) => {
     await enterPlaygroundRoom(page);
     await initEmptyParagraphState(page);
     const {
-      linkedPagePopover,
+      linkedDocPopover,
       pageBtn,
       assertExistRefText,
       assertActivePageIdx,
-    } = getLinkedPagePopover(page);
+    } = getLinkedDocPopover(page);
 
     await focusTitle(page);
     await type(page, 'page0');
@@ -677,7 +558,7 @@ test.describe('linked page popover', () => {
     await switchToPage(page);
     await focusRichText(page);
     await type(page, '@');
-    await expect(linkedPagePopover).toBeVisible();
+    await expect(linkedDocPopover).toBeVisible();
     await expect(pageBtn).toHaveCount(4);
 
     await assertActivePageIdx(0);
@@ -694,168 +575,175 @@ test.describe('linked page popover', () => {
     await expect(pageBtn).toHaveText([
       'page1',
       'page2',
-      'Create "Untitled" page',
+      'Create "Untitled" doc',
       'Import',
     ]);
     // page2
     //  ^  ^
     await type(page, 'a2');
     await expect(pageBtn).toHaveCount(3);
-    await expect(pageBtn).toHaveText(['page2', 'Create "a2" page', 'Import']);
+    await expect(pageBtn).toHaveText(['page2', 'Create "a2" doc', 'Import']);
     await pressEnter(page);
-    await expect(linkedPagePopover).toBeHidden();
+    await expect(linkedDocPopover).toBeHidden();
     await assertExistRefText('page2');
+  });
+
+  test('should paste query works', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+
+    await (async () => {
+      for (let index = 0; index < 3; index++) {
+        const newPage = await addNewPage(page);
+        await switchToPage(page, newPage.id);
+        await focusTitle(page);
+        await type(page, 'page' + index);
+      }
+    })();
+
+    await switchToPage(page);
+    await getDebugMenu(page).pagesBtn.click();
+    await focusRichText(page);
+    await type(page, 'e2');
+    await setInlineRangeInSelectedRichText(page, 0, 2);
+    await cutByKeyboard(page);
+
+    const { pageBtn, linkedDocPopover } = getLinkedDocPopover(page);
+    await type(page, '@');
+    await expect(linkedDocPopover).toBeVisible();
+    await expect(pageBtn).toHaveText([
+      'page0',
+      'page1',
+      'page2',
+      'Create "Untitled" doc',
+      'Import',
+    ]);
+
+    await page.keyboard.press(`${SHORT_KEY}+v`);
+    await expect(linkedDocPopover).toBeVisible();
+    await expect(pageBtn).toHaveText(['page2', 'Create "e2" doc', 'Import']);
+  });
+
+  test('should multiple paste query not works', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+
+    await (async () => {
+      for (let index = 0; index < 3; index++) {
+        const newPage = await addNewPage(page);
+        await switchToPage(page, newPage.id);
+        await focusTitle(page);
+        await type(page, 'page' + index);
+      }
+    })();
+
+    await switchToPage(page);
+    await getDebugMenu(page).pagesBtn.click();
+    await focusRichText(page);
+    await type(page, 'pa');
+    await pressEnter(page);
+    await type(page, 'ge');
+    await pressEnter(page);
+    await type(page, '2');
+
+    await selectAllByKeyboard(page);
+    await waitNextFrame(page, 200);
+    await selectAllByKeyboard(page);
+    await waitNextFrame(page, 200);
+    await selectAllByKeyboard(page);
+    await waitNextFrame(page, 200);
+    await cutByKeyboard(page);
+    const note = page.locator('affine-note');
+    await note.click({ force: true, position: { x: 100, y: 100 } });
+    await waitNextFrame(page, 200);
+
+    const { pageBtn, linkedDocPopover } = getLinkedDocPopover(page);
+    await type(page, '@');
+    await expect(linkedDocPopover).toBeVisible();
+    await expect(pageBtn).toHaveText([
+      'page0',
+      'page1',
+      'page2',
+      'Create "Untitled" doc',
+      'Import',
+    ]);
+
+    await page.keyboard.press(`${SHORT_KEY}+v`);
+    await expect(linkedDocPopover).not.toBeVisible();
+  });
+
+  test('should more docs works', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+
+    await (async () => {
+      for (let index = 0; index < 10; index++) {
+        const newPage = await addNewPage(page);
+        await switchToPage(page, newPage.id);
+        await focusTitle(page);
+        await type(page, 'page' + index);
+      }
+    })();
+
+    await switchToPage(page);
+    await getDebugMenu(page).pagesBtn.click();
+    await focusRichText(page);
+    await type(page, '@');
+
+    const { pageBtn, linkedDocPopover } = getLinkedDocPopover(page);
+    await expect(linkedDocPopover).toBeVisible();
+    await expect(pageBtn).toHaveText([
+      ...Array.from({ length: 6 }, (_, index) => `page${index}`),
+      '4 more docs',
+      'Create "Untitled" doc',
+      'Import',
+    ]);
+
+    const moreNode = page.locator(`icon-button[data-id="Link to Doc More"]`);
+    await moreNode.click();
+    await expect(pageBtn).toHaveText([
+      ...Array.from({ length: 10 }, (_, index) => `page${index}`),
+      'Create "Untitled" doc',
+      'Import',
+    ]);
   });
 });
 
-test.describe.skip('linked page with clipboard', () => {
-  test('paste subpage should paste as linked page', async ({ page }) => {
+test.describe('linked page with clipboard', () => {
+  test('paste linked page should paste as linked page', async ({
+    page,
+  }, testInfo) => {
     await enterPlaygroundRoom(page);
-    const { paragraphId } = await initEmptyParagraphState(page);
+    await initEmptyParagraphState(page);
     await focusRichText(page);
 
-    const { createLinkedPage, createSubpage } = getLinkedPagePopover(page);
+    const { createLinkedDoc } = getLinkedDocPopover(page);
 
-    await createSubpage('page0');
-    await createLinkedPage('page1');
+    await createLinkedDoc('page1');
 
     await selectAllByKeyboard(page);
     await copyByKeyboard(page);
     await focusRichText(page);
     await pasteByKeyboard(page);
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:paragraph
-  prop:text={
-    <>
-      <text
-        insert=" "
-        reference={
-          Object {
-            "pageId": "3",
-            "type": "Subpage",
-          }
-        }
-      />
-      <text
-        insert=" "
-        reference={
-          Object {
-            "pageId": "8",
-            "type": "LinkedPage",
-          }
-        }
-      />
-      <text
-        insert=" "
-        reference={
-          Object {
-            "pageId": "3",
-            "type": "LinkedPage",
-          }
-        }
-      />
-      <text
-        insert=" "
-        reference={
-          Object {
-            "pageId": "8",
-            "type": "LinkedPage",
-          }
-        }
-      />
-    </>
-  }
-  prop:type="text"
-/>`,
-      paragraphId
-    );
+    const json = await getPageSnapshot(page, true);
+    expect(json).toMatchSnapshot(`${testInfo.title}.json`);
   });
 
-  test('duplicated subpage should paste as linked page', async ({ page }) => {
+  test('duplicated linked page should paste as linked page', async ({
+    page,
+  }, testInfo) => {
     await enterPlaygroundRoom(page);
-    const { noteId } = await initEmptyParagraphState(page);
+    await initEmptyParagraphState(page);
     await focusRichText(page);
 
-    const { createLinkedPage, createSubpage } = getLinkedPagePopover(page);
+    const { createLinkedDoc } = getLinkedDocPopover(page);
 
-    await createLinkedPage('page0');
-    await createSubpage('page1');
+    await createLinkedDoc('page0');
 
     await type(page, '/duplicate');
     await pressEnter(page);
-    await assertStoreMatchJSX(
-      page,
-      `
-<affine:note
-  prop:background="--affine-background-secondary-color"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 8,
-        "borderSize": 4,
-        "borderStyle": "solid",
-        "shadowType": "--affine-note-shadow-box",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text={
-      <>
-        <text
-          insert=" "
-          reference={
-            Object {
-              "pageId": "3",
-              "type": "LinkedPage",
-            }
-          }
-        />
-        <text
-          insert=" "
-          reference={
-            Object {
-              "pageId": "8",
-              "type": "LinkedPage",
-            }
-          }
-        />
-      </>
-    }
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text={
-      <>
-        <text
-          insert=" "
-          reference={
-            Object {
-              "pageId": "3",
-              "type": "LinkedPage",
-            }
-          }
-        />
-        <text
-          insert=" "
-          reference={
-            Object {
-              "pageId": "8",
-              "type": "Subpage",
-            }
-          }
-        />
-      </>
-    }
-    prop:type="text"
-  />
-</affine:note>`,
-      noteId
-    );
+    const json = await getPageSnapshot(page, true);
+    expect(json).toMatchSnapshot(`${testInfo.title}.json`);
   });
 });
 
@@ -877,6 +765,7 @@ test('should [[Selected text]] converted to linked page', async ({ page }) => {
     page,
     `
 <affine:paragraph
+  prop:collapsed={false}
   prop:text={
     <>
       <text
@@ -902,4 +791,430 @@ test('should [[Selected text]] converted to linked page', async ({ page }) => {
   );
   await switchToPage(page, '3');
   await assertTitle(page, '2');
+});
+
+test('add reference node before the other reference node', async ({ page }) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyParagraphState(page);
+  await focusRichText(page);
+  await type(page, 'aaa');
+
+  const firstRefNode = page.locator('affine-reference').nth(0);
+
+  await type(page, '@bbb');
+  await pressEnter(page);
+
+  expect(await firstRefNode.textContent()).toEqual(
+    expect.stringContaining('bbb')
+  );
+  expect(await firstRefNode.textContent()).not.toEqual(
+    expect.stringContaining('ccc')
+  );
+
+  await pressArrowLeft(page, 3);
+  await type(page, '@ccc');
+  await pressEnter(page);
+
+  expect(await firstRefNode.textContent()).not.toEqual(
+    expect.stringContaining('bbb')
+  );
+  expect(await firstRefNode.textContent()).toEqual(
+    expect.stringContaining('ccc')
+  );
+});
+
+test('linked doc can be dragged from note to surface top level block', async ({
+  page,
+}) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyEdgelessState(page);
+  await focusRichText(page);
+  await createAndConvertToEmbedLinkedDoc(page);
+
+  await switchEditorMode(page);
+  await page.mouse.dblclick(450, 450);
+
+  await dragBlockToPoint(page, '9', { x: 200, y: 200 });
+
+  await waitNextFrame(page);
+  await assertParentBlockFlavour(page, '9', 'affine:surface');
+});
+
+// Aliases
+test.describe('Customize linked doc title and description', () => {
+  // Inline View
+  test('should set a custom title for inline link', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusTitle(page);
+    await type(page, 'title0');
+    await focusRichText(page);
+    await type(page, 'page0');
+    await assertRichTexts(page, ['page0']);
+
+    const { id } = await addNewPage(page);
+    await switchToPage(page, id);
+    await focusTitle(page);
+    await type(page, 'title1');
+    await focusRichText(page);
+    await type(page, 'page1');
+    await assertRichTexts(page, ['page1']);
+
+    await getDebugMenu(page).pagesBtn.click();
+
+    await focusRichText(page);
+    await type(page, '@title0');
+    await pressEnter(page);
+
+    const { findRefNode } = getLinkedDocPopover(page);
+    const page0 = await findRefNode('title0');
+    await page0.hover();
+
+    await waitNextFrame(page, 200);
+    const referencePopup = page.locator('.affine-reference-popover-container');
+    await expect(referencePopup).toBeVisible();
+
+    const editButton = referencePopup.getByRole('button', { name: 'Edit' });
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+    const popup = page.locator('.alias-form-popup');
+    await expect(popup).toBeVisible();
+
+    const input = popup.locator('input');
+    await expect(input).toBeFocused();
+
+    // title alias
+    await type(page, 'page0-title0');
+    await pressEnter(page);
+
+    await page.mouse.click(0, 0);
+
+    await focusRichText(page);
+    await waitNextFrame(page, 200);
+
+    const page0Alias = await findRefNode('page0-title0');
+    await page0Alias.hover();
+
+    await waitNextFrame(page, 200);
+    await expect(referencePopup).toBeVisible();
+
+    // original title button
+    const docTitle = referencePopup.getByRole('button', { name: 'Doc title' });
+    await expect(docTitle).toHaveText('title0', { useInnerText: true });
+
+    // reedit
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+
+    // reset
+    await popup.getByRole('button', { name: 'Reset' }).click();
+
+    await waitNextFrame(page, 200);
+
+    const resetedPage0 = await findRefNode('title0');
+    await resetedPage0.hover();
+
+    await waitNextFrame(page, 200);
+    await expect(referencePopup).toBeVisible();
+    await expect(docTitle).not.toBeVisible();
+  });
+
+  // Card View
+  test('should set a custom title and description for card link', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusTitle(page);
+    await type(page, 'title0');
+
+    const { id } = await addNewPage(page);
+    await switchToPage(page, id);
+    await focusTitle(page);
+    await type(page, 'title1');
+
+    await getDebugMenu(page).pagesBtn.click();
+
+    await focusRichText(page);
+    await type(page, '@title0');
+    await pressEnter(page);
+
+    const { findRefNode } = getLinkedDocPopover(page);
+    const page0 = await findRefNode('title0');
+    await page0.hover();
+
+    await waitNextFrame(page, 200);
+    const referencePopup = page.locator('.affine-reference-popover-container');
+
+    let editButton = referencePopup.getByRole('button', { name: 'Edit' });
+    await editButton.click();
+
+    // title alias
+    await type(page, 'page0-title0');
+    await pressEnter(page);
+
+    await focusRichText(page);
+    await waitNextFrame(page, 200);
+
+    const page0Alias = await findRefNode('page0-title0');
+    await page0Alias.hover();
+
+    await waitNextFrame(page, 200);
+    const switchButton = referencePopup.getByRole('button', {
+      name: 'Switch view',
+    });
+    await switchButton.click();
+
+    // switches to card view
+    const toCardButton = referencePopup.getByRole('button', {
+      name: 'Card view',
+    });
+    await toCardButton.click();
+
+    await waitNextFrame(page, 200);
+    const linkedDocBlock = page.locator('affine-embed-linked-doc-block');
+    await expect(linkedDocBlock).toBeVisible();
+
+    const linkedDocBlockTitle = linkedDocBlock.locator(
+      '.affine-embed-linked-doc-content-title-text'
+    );
+    await expect(linkedDocBlockTitle).toHaveText('page0-title0');
+
+    await linkedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    const cardToolbar = page.locator('affine-embed-card-toolbar');
+    const docTitleButton = cardToolbar.getByRole('button', {
+      name: 'Doc title',
+    });
+    await expect(docTitleButton).toBeVisible();
+
+    editButton = cardToolbar.getByRole('button', { name: 'Edit' });
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+    const editModal = page.locator('embed-card-edit-modal');
+    const resetButton = editModal.getByRole('button', { name: 'Reset' });
+    const saveButton = editModal.getByRole('button', { name: 'Save' });
+
+    // clears aliases
+    await resetButton.click();
+
+    await waitNextFrame(page, 200);
+    await expect(linkedDocBlockTitle).toHaveText('title0');
+
+    await linkedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+
+    // title alias
+    await type(page, 'page0-title0');
+    await page.keyboard.press('Tab');
+    // description alias
+    await type(page, 'This is a new description');
+
+    // saves aliases
+    await saveButton.click();
+
+    await waitNextFrame(page, 200);
+    await expect(linkedDocBlockTitle).toHaveText('page0-title0');
+    await expect(
+      page.locator('.affine-embed-linked-doc-content-note.alias')
+    ).toHaveText('This is a new description');
+  });
+
+  // Embed View
+  test('should automatically switch to card view and set a custom title and description', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusTitle(page);
+    await type(page, 'title0');
+
+    const { id } = await addNewPage(page);
+    await switchToPage(page, id);
+    await focusTitle(page);
+    await type(page, 'title1');
+
+    await getDebugMenu(page).pagesBtn.click();
+
+    await focusRichText(page);
+    await type(page, '@title0');
+    await pressEnter(page);
+
+    const { findRefNode } = getLinkedDocPopover(page);
+    const page0 = await findRefNode('title0');
+    await page0.hover();
+
+    await waitNextFrame(page, 200);
+    const referencePopup = page.locator('.affine-reference-popover-container');
+
+    let editButton = referencePopup.getByRole('button', { name: 'Edit' });
+    await editButton.click();
+
+    // title alias
+    await type(page, 'page0-title0');
+    await pressEnter(page);
+
+    await focusRichText(page);
+    await waitNextFrame(page, 200);
+
+    const page0Alias = await findRefNode('page0-title0');
+    await page0Alias.hover();
+
+    await waitNextFrame(page, 200);
+    let switchButton = referencePopup.getByRole('button', {
+      name: 'Switch view',
+    });
+    await switchButton.click();
+
+    // switches to card view
+    const toCardButton = referencePopup.getByRole('button', {
+      name: 'Card view',
+    });
+    await toCardButton.click();
+
+    await waitNextFrame(page, 200);
+    const linkedDocBlock = page.locator('affine-embed-linked-doc-block');
+
+    await linkedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    const cardToolbar = page.locator('affine-embed-card-toolbar');
+    switchButton = cardToolbar.getByRole('button', { name: 'Switch view' });
+    await switchButton.click();
+
+    await waitNextFrame(page, 200);
+
+    // switches to embed view
+    const toEmbedButton = cardToolbar.getByRole('button', {
+      name: 'Embed view',
+    });
+    await toEmbedButton.click();
+
+    await waitNextFrame(page, 200);
+    const syncedDocBlock = page.locator('affine-embed-synced-doc-block');
+
+    await syncedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    const syncedDocBlockTitle = syncedDocBlock.locator(
+      '.affine-embed-synced-doc-title'
+    );
+    await expect(syncedDocBlockTitle).toHaveText('title0');
+
+    await syncedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    editButton = cardToolbar.getByRole('button', { name: 'Edit' });
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+    const editModal = page.locator('embed-card-edit-modal');
+    const cancelButton = editModal.getByRole('button', { name: 'Cancel' });
+    const saveButton = editModal.getByRole('button', { name: 'Save' });
+
+    // closes edit-model
+    await cancelButton.click();
+
+    await waitNextFrame(page, 200);
+    await expect(editModal).not.toBeVisible();
+
+    await syncedDocBlock.click();
+
+    await waitNextFrame(page, 200);
+    await editButton.click();
+
+    await waitNextFrame(page, 200);
+
+    // title alias
+    await type(page, 'page0-title0');
+    await page.keyboard.press('Tab');
+    // description alias
+    await type(page, 'This is a new description');
+
+    // saves aliases
+    await saveButton.click();
+
+    await waitNextFrame(page, 200);
+
+    // automatically switch to card view
+    await expect(syncedDocBlock).not.toBeVisible();
+
+    await expect(linkedDocBlock).toBeVisible();
+    const linkedDocBlockTitle = linkedDocBlock.locator(
+      '.affine-embed-linked-doc-content-title-text'
+    );
+    await expect(linkedDocBlockTitle).toHaveText('page0-title0');
+    await expect(
+      linkedDocBlock.locator('.affine-embed-linked-doc-content-note.alias')
+    ).toHaveText('This is a new description');
+  });
+
+  // Embed View
+  test.fixme(
+    'should automatically switch to card view and set a custom title and description on edgeless',
+    async ({ page }) => {
+      await enterPlaygroundRoom(page);
+      await initEmptyEdgelessState(page);
+      await focusRichText(page);
+      await createAndConvertToEmbedLinkedDoc(page);
+
+      await switchEditorMode(page);
+      await page.mouse.dblclick(450, 450);
+
+      await dragBlockToPoint(page, '9', { x: 200, y: 200 });
+
+      await waitNextFrame(page);
+
+      const toolbar = page.locator('editor-toolbar');
+      await toolbar.getByRole('button', { name: 'Switch view' }).click();
+      await toolbar.getByRole('button', { name: 'Embed view' }).click();
+
+      await waitNextFrame(page);
+
+      await toolbar.getByRole('button', { name: 'Edit' }).click();
+
+      await waitNextFrame(page);
+      const editModal = page.locator('embed-card-edit-modal');
+      const saveButton = editModal.getByRole('button', { name: 'Save' });
+
+      // title alias
+      await type(page, 'page0-title0');
+      await page.keyboard.press('Tab');
+      // description alias
+      await type(page, 'This is a new description');
+
+      // saves aliases
+      await saveButton.click();
+
+      await waitNextFrame(page);
+
+      const syncedDocBlock = page.locator(
+        'affine-embed-edgeless-synced-doc-block'
+      );
+
+      await expect(syncedDocBlock).toBeHidden();
+
+      const linkedDocBlock = page.locator(
+        'affine-embed-edgeless-linked-doc-block'
+      );
+
+      await expect(linkedDocBlock).toBeVisible();
+
+      const linkedDocBlockTitle = linkedDocBlock.locator(
+        '.affine-embed-linked-doc-content-title-text'
+      );
+      await expect(linkedDocBlockTitle).toHaveText('page0-title0');
+      await expect(
+        linkedDocBlock.locator('.affine-embed-linked-doc-content-note.alias')
+      ).toHaveText('This is a new description');
+    }
+  );
 });

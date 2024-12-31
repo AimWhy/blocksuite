@@ -3,7 +3,13 @@
   "compilerOptions": {
     "baseUrl": ".",
     "noEmit": true,
-    "composite": false
+    "composite": false,
+    "paths": {
+      "@blocks/*": ["../packages/blocks/src/*"],
+      "@inline/*": ["../packages/framework/inline/src/*"],
+      "@store/*": ["../packages/framework/store/src/*"],
+      "@playground/*": ["../packages/playground/*"]
+    }
   },
   "include": ["**.spec.ts", "**.test.ts", "**/**.ts"]
 }

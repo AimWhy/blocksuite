@@ -1,54 +1,125 @@
-/// <reference types="@blocksuite/global" />
-// manual import to avoid being tree-shaken
-import './page-block/index.js';
-import './paragraph-block/index.js';
-import './list-block/index.js';
-import './note-block/index.js';
-import './frame-block/index.js';
-import './divider-block/index.js';
-import './code-block/affine-code-line.js';
-import './image-block/index.js';
-import './surface-block/index.js';
-import './database-block/index.js';
-import './surface-ref-block/index.js';
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./effects.ts" />
+import { deserializeXYWH, Point } from '@blocksuite/global/utils';
+
+import { matchFlavours } from './_common/utils/index.js';
+import { splitElements } from './root-block/edgeless/utils/clipboard-utils.js';
+import { isCanvasElement } from './root-block/edgeless/utils/query.js';
 
 export * from './_common/adapters/index.js';
-export * from './_common/components/index.js';
-export * from './_common/consts.js';
+
+export * from './_common/components/ai-item/index.js';
+export { scrollbarStyle } from './_common/components/index.js';
+export { type NavigatorMode } from './_common/edgeless/frame/consts.js';
+export {
+  ExportManager,
+  ExportManagerExtension,
+} from './_common/export-manager/export-manager.js';
 export * from './_common/test-utils/test-utils.js';
-export type { CssVariableName } from './_common/theme/css-variables.js';
-export * from './_common/theme/css-variables.js';
-export * from './_common/theme/theme-observer.js';
 export * from './_common/transformers/index.js';
-export * from './_common/utils/edgeless.js';
-export * from './_common/utils/filesys.js';
-export * from './_common/utils/init.js';
-export * from './_common/utils/query.js';
-export * from './_common/utils/rect.js';
-export * from './_common/utils/selection.js';
-export * from './_common/utils/types.js';
-export * from './_common/widgets/index.js';
-export { getServiceOrRegister } from './_legacy/service/index.js';
-export type { BaseService } from './_legacy/service/service.js';
-export * from './_presets/index.js';
+export { type AbstractEditor } from './_common/types.js';
+export * from './_specs/index.js';
 export * from './attachment-block/index.js';
 export * from './bookmark-block/index.js';
 export * from './code-block/index.js';
 export * from './data-view-block/index.js';
 export * from './database-block/index.js';
 export * from './divider-block/index.js';
+export * from './edgeless-text-block/index.js';
 export * from './frame-block/index.js';
 export * from './image-block/index.js';
-export * from './list-block/index.js';
-export * from './models.js';
+export * from './latex-block/index.js';
 export * from './note-block/index.js';
-export * from './page-block/index.js';
-export * from './paragraph-block/index.js';
-export * from './surface-block/index.js';
-export * from './surface-block/surface-block.js';
-export * from './surface-block/surface-model.js';
-export * from './surface-block/surface-service.js';
+export { EdgelessTemplatePanel } from './root-block/edgeless/components/toolbar/template/template-panel.js';
+export type {
+  Template,
+  TemplateCategory,
+  TemplateManager,
+} from './root-block/edgeless/components/toolbar/template/template-type.js';
+export {
+  EdgelessFrameManager,
+  FrameOverlay,
+} from './root-block/edgeless/frame-manager.js';
+export { CopilotTool } from './root-block/edgeless/gfx-tool/copilot-tool.js';
+
+export * from './root-block/edgeless/gfx-tool/index.js';
+export { EditPropsMiddlewareBuilder } from './root-block/edgeless/middlewares/base.js';
+export * from './root-block/edgeless/utils/common.js';
+export { EdgelessSnapManager } from './root-block/edgeless/utils/snap-manager.js';
+export * from './root-block/index.js';
+export * from './schemas.js';
+export {
+  markdownToMindmap,
+  MindmapSurfaceBlock,
+  MiniMindmapPreview,
+} from './surface-block/mini-mindmap/index.js';
 export * from './surface-ref-block/index.js';
+export * from '@blocksuite/affine-block-embed';
+export * from '@blocksuite/affine-block-list';
+export * from '@blocksuite/affine-block-paragraph';
+export * from '@blocksuite/affine-block-surface';
+export { type MenuOptions } from '@blocksuite/affine-components/context-menu';
+export {
+  HoverController,
+  whenHover,
+} from '@blocksuite/affine-components/hover';
+export {
+  ArrowDownSmallIcon,
+  CloseIcon,
+  DocIcon,
+  DualLinkIcon16,
+  LinkedDocIcon,
+  PlusIcon,
+  TagsIcon,
+} from '@blocksuite/affine-components/icons';
+export * from '@blocksuite/affine-components/icons';
+export * from '@blocksuite/affine-components/peek';
+export {
+  createLitPortal,
+  createSimplePortal,
+} from '@blocksuite/affine-components/portal';
+export * from '@blocksuite/affine-components/rich-text';
+export { toast } from '@blocksuite/affine-components/toast';
+export {
+  type AdvancedMenuItem,
+  type FatMenuItems,
+  groupsToActions,
+  type MenuItem,
+  type MenuItemGroup,
+  renderActions,
+  renderGroups,
+  renderToolbarSeparator,
+  Tooltip,
+} from '@blocksuite/affine-components/toolbar';
+export * from '@blocksuite/affine-model';
+export * from '@blocksuite/affine-shared/services';
+
+export {
+  ColorVariables,
+  FontFamilyVariables,
+  SizeVariables,
+  StyleVariables,
+} from '@blocksuite/affine-shared/theme';
+export {
+  createButtonPopper,
+  createDefaultDoc,
+  findNoteBlockModel,
+  isInsideEdgelessEditor,
+  isInsidePageEditor,
+  matchFlavours,
+  on,
+  once,
+  openFileOrFiles,
+  printToPdf,
+} from '@blocksuite/affine-shared/utils';
+
+export const BlocksUtils = {
+  splitElements,
+  matchFlavours,
+  deserializeXYWH,
+  isCanvasElement,
+  Point,
+};
 
 const env: Record<string, unknown> =
   typeof globalThis !== 'undefined'
@@ -66,12 +137,6 @@ if (env[importIdentifier] === true) {
   // https://github.com/yjs/yjs/issues/438
   console.error(
     '@blocksuite/blocks was already imported. This breaks constructor checks and will lead to issues!'
-  );
-}
-
-if (typeof window === 'undefined') {
-  throw new Error(
-    'Seems like you are importing @blocksuite/blocks in SSR mode. Which is not supported for now.'
   );
 }
 

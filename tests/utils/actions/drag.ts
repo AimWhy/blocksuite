@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 
+import { assertImageOption } from 'utils/asserts.js';
+
 import { getIndexCoordinate, waitNextFrame } from './misc.js';
 
 export async function dragBetweenCoords(
@@ -10,17 +12,20 @@ export async function dragBetweenCoords(
     beforeMouseUp?: () => Promise<void>;
     steps?: number;
     click?: boolean;
+    button?: 'left' | 'right' | 'middle';
   }
 ) {
   const steps = options?.steps ?? 20;
+  const button: 'left' | 'right' | 'middle' = options?.button ?? 'left';
+
   const { x: x1, y: y1 } = from;
   const { x: x2, y: y2 } = to;
   options?.click && (await page.mouse.click(x1, y1));
   await page.mouse.move(x1, y1);
-  await page.mouse.down();
+  await page.mouse.down({ button });
   await page.mouse.move(x2, y2, { steps });
   await options?.beforeMouseUp?.();
-  await page.mouse.up();
+  await page.mouse.up({ button });
 }
 
 export async function dragBetweenIndices(
@@ -37,7 +42,7 @@ export async function dragBetweenIndices(
 ) {
   const finalOptions = {
     steps: 50,
-    ...(options || {}),
+    ...options,
   };
   const startCoord = await getIndexCoordinate(
     page,
@@ -56,7 +61,7 @@ export async function dragBetweenIndices(
 export async function dragOverTitle(page: Page) {
   const { from, to } = await page.evaluate(() => {
     const titleInput = document.querySelector(
-      '.affine-doc-page-block-title'
+      'doc-title rich-text'
     ) as HTMLTextAreaElement;
     const titleBound = titleInput.getBoundingClientRect();
 
@@ -126,9 +131,9 @@ export async function dragHandleFromBlockToBlockBottomById(
     sourceBlock.y + sourceBlock.height / 2
   );
   await waitNextFrame(page);
-  const handle = await page
-    .locator('.affine-drag-handle-container')
-    .boundingBox();
+  const dragHandleContainer = page.locator('.affine-drag-handle-container');
+  await dragHandleContainer.hover();
+  const handle = await dragHandleContainer.boundingBox();
   if (!handle) {
     throw new Error();
   }
@@ -139,7 +144,7 @@ export async function dragHandleFromBlockToBlockBottomById(
   );
   await page.mouse.down();
   await page.mouse.move(
-    targetBlock.x + targetBlock.width / 2,
+    targetBlock.x,
     targetBlock.y + (bottom ? targetBlock.height - 1 : 1),
     {
       steps: 50,
@@ -148,7 +153,7 @@ export async function dragHandleFromBlockToBlockBottomById(
 
   if (offset) {
     await page.mouse.move(
-      targetBlock.x - offset,
+      targetBlock.x + offset,
       targetBlock.y + (bottom ? targetBlock.height - 1 : 1),
       {
         steps: 50,
@@ -207,6 +212,38 @@ export async function moveToImage(page: Page) {
     };
   });
   await page.mouse.move(x, y);
+}
+
+export async function popImageMoreMenu(page: Page) {
+  await moveToImage(page);
+  await assertImageOption(page);
+  const moreButton = page.locator('.image-toolbar-button.more');
+  await moreButton.click();
+  const menu = page.locator('.image-more-popup-menu');
+
+  const turnIntoCardButton = page.locator('editor-menu-action', {
+    hasText: 'Turn into card view',
+  });
+
+  const copyButton = page.locator('editor-menu-action', {
+    hasText: 'Copy',
+  });
+
+  const duplicateButton = page.locator('editor-menu-action', {
+    hasText: 'Duplicate',
+  });
+
+  const deleteButton = page.locator('editor-menu-action', {
+    hasText: 'Delete',
+  });
+
+  return {
+    menu,
+    copyButton,
+    turnIntoCardButton,
+    duplicateButton,
+    deleteButton,
+  };
 }
 
 export async function clickBlockDragHandle(page: Page, blockId: string) {

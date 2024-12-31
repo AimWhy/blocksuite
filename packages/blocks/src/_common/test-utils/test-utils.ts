@@ -1,33 +1,22 @@
-import { updateBlockElementType } from '../../page-block/utils/operations/element/block-level.js';
+import type { BlockSnapshot, SliceSnapshot } from '@blocksuite/store';
+
 import {
   mergeToCodeModel,
   transformModel,
-} from '../../page-block/utils/operations/model.js';
-import { getSelectedContentModels } from '../../page-block/utils/selection.js';
+} from '../../root-block/utils/operations/model.js';
 
-class PageTestUtils {
-  // block element operations (ui layer)
-  updateBlockElementType = updateBlockElementType;
-
+class DocTestUtils {
   // block model operations (data layer)
   mergeToCodeModel = mergeToCodeModel;
-  transformModel = transformModel;
 
-  // selection
-  getSelectedContentModels = getSelectedContentModels;
+  transformModel = transformModel;
 }
 
 export class TestUtils {
-  pageBlock = new PageTestUtils();
+  docTestUtils = new DocTestUtils();
 }
 
-import type { BlockSnapshot } from '@blocksuite/store';
-
-export function logJson(ast: unknown) {
-  console.log(JSON.stringify(ast, null, 2));
-}
-
-export function nanoidReplacement(snapshot: BlockSnapshot) {
+export function nanoidReplacement(snapshot: BlockSnapshot | SliceSnapshot) {
   return JSON.parse(nanoidReplacementString(JSON.stringify(snapshot)));
 }
 
@@ -35,11 +24,14 @@ const escapedSnapshotAttributes = [
   '"attributes"',
   '"conditions"',
   '"iconColumn"',
+  '"background"',
+  '"LinkedPage"',
+  '"elementIds"',
 ];
 
 function nanoidReplacementString(snapshotString: string) {
   const re =
-    /("block:[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{10}")|("var\(--affine-tag-[a-z]{3,10}\)")|("[A-Za-z0-9-_=]{44}")/g;
+    /("block:[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{10}")|("var\(--affine-v2-chip-label-[a-z]{3,10}\)")|("[A-Za-z0-9-_=]{44}")/g;
   const matches = snapshotString.matchAll(re);
   const matchesReplaceMap = new Map();
   let escapedNumber = 0;

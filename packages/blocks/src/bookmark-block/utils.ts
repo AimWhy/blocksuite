@@ -1,67 +1,49 @@
-import type { BaseBlockModel } from '@blocksuite/store';
+import { isAbortError } from '@blocksuite/affine-shared/utils';
+import { assertExists } from '@blocksuite/global/utils';
 
 import type { BookmarkBlockComponent } from './bookmark-block.js';
-import type { BookmarkBlockModel, BookmarkProps } from './bookmark-model.js';
-import { defaultBookmarkProps } from './bookmark-model.js';
 
-export function tryGetBookmarkAPI():
-  | ((url: string) => Promise<BookmarkProps>)
-  | null {
-  // This method is get website's metaData by link
-  // And only exists in the AFFiNE client
-  // @ts-expect-error
-  if (window?.apis?.ui?.getBookmarkDataByLink) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).apis.ui.getBookmarkDataByLink;
-  }
-  return null;
-}
-
-// Result is boolean used to record whether the meta data is crawled
-export async function reloadBookmarkBlock(
-  model: BaseBlockModel<BookmarkBlockModel>,
+export async function refreshBookmarkUrlData(
   bookmarkElement: BookmarkBlockComponent,
-  force = false
+  signal?: AbortSignal
 ) {
-  const getBookmarkDataByLink = tryGetBookmarkAPI();
-  if (!getBookmarkDataByLink) return;
-  if ((model.crawled || !model.url) && !force) {
-    return;
-  }
+  let title = null,
+    description = null,
+    icon = null,
+    image = null;
 
-  bookmarkElement.loading = true;
+  try {
+    bookmarkElement.loading = true;
 
-  const metaData = await getBookmarkDataByLink(model.url);
+    const queryUrlData = bookmarkElement.service?.queryUrlData;
+    assertExists(queryUrlData);
 
-  // check is block exist
-  if (!model.page.getBlockById(model.id)) {
-    return;
-  }
+    const bookmarkUrlData = await queryUrlData(
+      bookmarkElement.model.url,
+      signal
+    );
 
-  const { title, description, icon, image } = metaData;
+    title = bookmarkUrlData.title ?? null;
+    description = bookmarkUrlData.description ?? null;
+    icon = bookmarkUrlData.icon ?? null;
+    image = bookmarkUrlData.image ?? null;
 
-  model.page.withoutTransact(() => {
-    model.page.updateBlock(model, {
-      bookmarkTitle: title,
+    if (!title && !description && !icon && !image) {
+      bookmarkElement.error = true;
+    }
+
+    if (signal?.aborted) return;
+
+    bookmarkElement.doc.updateBlock(bookmarkElement.model, {
+      title,
       description,
       icon,
       image,
-      url: model.url,
-      crawled: true,
     });
-  });
-
-  bookmarkElement.loading = false;
-}
-
-export function cloneBookmarkProperties(
-  model: BaseBlockModel<BookmarkBlockModel>
-) {
-  return Object.keys(defaultBookmarkProps).reduce<BookmarkProps>(
-    (props, key) => {
-      props[key] = model[key];
-      return props;
-    },
-    {} as BookmarkProps
-  );
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) return;
+    throw error;
+  } finally {
+    bookmarkElement.loading = false;
+  }
 }

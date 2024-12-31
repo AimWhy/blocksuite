@@ -1,40 +1,115 @@
-import type { JobMiddleware } from '@blocksuite/store';
+import { extMimeMap, getAssetName } from '@blocksuite/store';
+import * as fflate from 'fflate';
 
-import type { DatabaseBlockModel } from '../../database-block/index.js';
+export class Zip {
+  private compressed = new Uint8Array();
 
-export const replaceIdMiddleware: JobMiddleware = ({ slots, workspace }) => {
-  const idMap = new Map<string, string>();
-  slots.afterImport.on(payload => {
-    if (
-      payload.type === 'block' &&
-      payload.snapshot.flavour === 'affine:database'
-    ) {
-      const model = payload.model as DatabaseBlockModel;
-      Object.keys(model.cells).forEach(cellId => {
-        if (idMap.has(cellId)) {
-          model.cells[idMap.get(cellId)!] = model.cells[cellId];
-          delete model.cells[cellId];
-        }
-      });
+  private finalize?: () => void;
+
+  private finalized = false;
+
+  private zip = new fflate.Zip((err, chunk, final) => {
+    if (!err) {
+      const temp = new Uint8Array(this.compressed.length + chunk.length);
+      temp.set(this.compressed);
+      temp.set(chunk, this.compressed.length);
+      this.compressed = temp;
+    }
+    if (final) {
+      this.finalized = true;
+      this.finalize?.();
     }
   });
-  slots.beforeImport.on(payload => {
-    if (payload.type === 'page') {
-      payload.snapshot.meta.id = workspace.idGenerator('page');
-      return;
-    }
 
-    if (payload.type === 'block') {
-      const snapshot = payload.snapshot;
-      const original = snapshot.id;
-      let newId: string;
-      if (idMap.has(original)) {
-        newId = idMap.get(original)!;
+  async file(path: string, content: Blob | File | string) {
+    const deflate = new fflate.ZipDeflate(path);
+    this.zip.add(deflate);
+    if (typeof content === 'string') {
+      deflate.push(fflate.strToU8(content), true);
+    } else {
+      deflate.push(new Uint8Array(await content.arrayBuffer()), true);
+    }
+  }
+
+  folder(folderPath: string) {
+    return {
+      folder: (folderPath2: string) => {
+        return this.folder(`${folderPath}/${folderPath2}`);
+      },
+      file: async (name: string, blob: Blob) => {
+        await this.file(`${folderPath}/${name}`, blob);
+      },
+      generate: async () => {
+        return this.generate();
+      },
+    };
+  }
+
+  async generate() {
+    this.zip.end();
+    return new Promise<Blob>(resolve => {
+      if (this.finalized) {
+        resolve(new Blob([this.compressed], { type: 'application/zip' }));
       } else {
-        newId = workspace.idGenerator('block');
-        idMap.set(original, newId);
+        this.finalize = () =>
+          resolve(new Blob([this.compressed], { type: 'application/zip' }));
       }
-      snapshot.id = newId;
+    });
+  }
+}
+
+export class Unzip {
+  private unzipped?: ReturnType<typeof fflate.unzipSync>;
+
+  async load(blob: Blob) {
+    this.unzipped = fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
+  }
+
+  *[Symbol.iterator]() {
+    const keys = Object.keys(this.unzipped ?? {});
+    let index = 0;
+    while (keys.length) {
+      const path = keys.shift()!;
+      if (path.includes('__MACOSX') || path.includes('DS_Store')) {
+        continue;
+      }
+      const lastSplitIndex = path.lastIndexOf('/');
+      const fileName = path.substring(lastSplitIndex + 1);
+      const fileExt =
+        fileName.lastIndexOf('.') === -1 ? '' : fileName.split('.').at(-1);
+      const mime = extMimeMap.get(fileExt ?? '');
+      const content = new File([this.unzipped![path]], fileName, {
+        type: mime ?? '',
+      }) as Blob;
+      yield { path, content, index };
+      index++;
     }
-  });
-};
+  }
+}
+
+export async function createAssetsArchive(
+  assetsMap: Map<string, Blob>,
+  assetsIds: string[]
+) {
+  const zip = new Zip();
+
+  for (const [id, blob] of assetsMap) {
+    if (!assetsIds.includes(id)) continue;
+    const name = getAssetName(assetsMap, id);
+    await zip.folder('assets').file(name, blob);
+  }
+
+  return zip;
+}
+
+export function download(blob: Blob, name: string) {
+  const element = document.createElement('a');
+  element.setAttribute('download', name);
+  const fileURL = URL.createObjectURL(blob);
+  element.setAttribute('href', fileURL);
+  element.style.display = 'none';
+  document.body.append(element);
+  element.click();
+  element.remove();
+  URL.revokeObjectURL(fileURL);
+}

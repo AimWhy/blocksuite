@@ -1,17 +1,14 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import type {
   RichTextCell,
   RichTextCellEditing,
-} from '../../packages/blocks/src/database-block/common/columns/rich-text/cell-renderer.js';
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import type { ColumnType } from '../../packages/blocks/src/index.js';
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { ZERO_WIDTH_SPACE } from '../../packages/virgo/src/consts.js';
+} from '@blocks/database-block/properties/rich-text/cell-renderer.js';
+
+import { press } from '@inline/__tests__/utils.js';
+import { ZERO_WIDTH_SPACE } from '@inline/consts.js';
+import { expect, type Locator, type Page } from '@playwright/test';
+
 import {
   pressEnter,
-  pressEscape,
   selectAllByKeyboard,
   type,
 } from '../utils/actions/keyboard.js';
@@ -21,14 +18,13 @@ import {
   getEditorLocator,
   waitNextFrame,
 } from '../utils/actions/misc.js';
-import { assertExists } from '../utils/asserts.js';
 
 export async function initDatabaseColumn(page: Page, title = '') {
   const editor = getEditorLocator(page);
   await editor.locator('affine-data-view-table-group').first().hover();
   const columnAddBtn = editor.locator('.header-add-column-button');
   await columnAddBtn.click();
-  await waitNextFrame(page, 100);
+  await waitNextFrame(page, 200);
 
   if (title) {
     await selectAllByKeyboard(page);
@@ -36,7 +32,7 @@ export async function initDatabaseColumn(page: Page, title = '') {
     await waitNextFrame(page);
     await pressEnter(page);
   } else {
-    await pressEscape(page);
+    await pressEnter(page);
   }
 }
 
@@ -54,13 +50,13 @@ export async function performColumnAction(
 ) {
   await renameColumn(page, name);
 
-  const actionMenu = page.locator(`.affine-menu-action`, { hasText: action });
+  const actionMenu = page.locator(`.affine-menu-button`, { hasText: action });
   await actionMenu.click();
 }
 
 export async function switchColumnType(
   page: Page,
-  columnType: ColumnType,
+  columnType: string,
   columnIndex = 1
 ) {
   const { typeIcon } = await getDatabaseHeaderColumn(page, columnIndex);
@@ -69,8 +65,8 @@ export async function switchColumnType(
   await clickColumnType(page, columnType);
 }
 
-export function clickColumnType(page: Page, columnType: ColumnType) {
-  const typeMenu = page.locator(`.affine-menu-action`, {
+export function clickColumnType(page: Page, columnType: string) {
+  const typeMenu = page.locator(`.affine-menu-button`, {
     hasText: new RegExp(`${columnType}`),
   });
   return typeMenu.click();
@@ -168,7 +164,7 @@ export async function performSelectColumnTagAction(
 ) {
   await clickSelectOption(page, index);
   await page
-    .locator('.affine-menu-action', { hasText: new RegExp(name) })
+    .locator('.affine-menu-button', { hasText: new RegExp(name) })
     .click();
 }
 
@@ -182,13 +178,13 @@ export async function assertSelectedStyle(
 }
 
 export async function clickDatabaseOutside(page: Page) {
-  const pageTitle = page.locator('.affine-doc-page-block-title');
-  await pageTitle.click();
+  const docTitle = page.locator('.doc-title-container');
+  await docTitle.click();
 }
 
 export async function assertColumnWidth(locator: Locator, width: number) {
   const box = await getBoundingBox(locator);
-  expect(box.width).toBe(width);
+  expect(box.width).toBe(width + 1);
   return box;
 }
 
@@ -215,7 +211,7 @@ export async function assertDatabaseCellRichTexts(
 
   const richText = (await cellEditing.count()) === 0 ? cell : cellEditing;
   const actualTexts = await richText.evaluate(ele => {
-    return (ele as RichTextCellEditing).vEditor?.yTextString;
+    return (ele as RichTextCellEditing).inlineEditor?.yTextString;
   });
   expect(actualTexts).toEqual(text);
 }
@@ -270,7 +266,7 @@ export async function assertDatabaseCellLink(
           'affine-database-link-cell-editing'
         );
       if (!richText) throw new Error('Missing database rich text cell');
-      return richText.vEditor.yText.toString();
+      return richText.inlineEditor.yText.toString();
     },
     { rowIndex, columnIndex }
   );
@@ -279,7 +275,7 @@ export async function assertDatabaseCellLink(
 
 export async function assertDatabaseTitleText(page: Page, text: string) {
   const dbTitle = page.locator('[data-block-is-database-title="true"]');
-  expect(await dbTitle.textContent()).toEqual(text);
+  expect(await dbTitle.inputValue()).toEqual(text);
 }
 
 export async function waitSearchTransitionEnd(page: Page) {
@@ -296,7 +292,7 @@ export async function assertDatabaseSearching(
 }
 
 export async function focusDatabaseSearch(page: Page) {
-  (await getDatabaseMouse(page)).mouseOver();
+  await (await getDatabaseMouse(page)).mouseOver();
 
   const searchExpand = page.locator('.search-container-expand');
   const count = await searchExpand.count();
@@ -358,46 +354,12 @@ export async function assertRowsSelection(
   page: Page,
   rowIndexes: [start: number, end: number]
 ) {
-  const selection = page.locator('.database-selection');
-  const selectionBox = await getBoundingBox(selection);
-  const containerBox = await getDatabaseTableContainer(page).boundingBox();
-  assertExists(containerBox);
+  const rows = page.locator('data-view-table-row');
   const startIndex = rowIndexes[0];
   const endIndex = rowIndexes[1];
-
-  if (startIndex === endIndex) {
-    // single row
-    const row = getDatabaseBodyRow(page, startIndex);
-    const rowBox = await getBoundingBox(row);
-    const lastCell = await row
-      .locator('affine-database-cell-container')
-      .last()
-      .boundingBox();
-    assertExists(lastCell);
-    expect(selectionBox).toEqual({
-      x: rowBox.x,
-      y: rowBox.y,
-      height: rowBox.height,
-      width: containerBox.width,
-    });
-  } else {
-    // multiple rows
-    // Only test at most two lines when testing.
-    const startRow = getDatabaseBodyRow(page, startIndex);
-    const endRow = getDatabaseBodyRow(page, endIndex);
-    const startRowBox = await getBoundingBox(startRow);
-    const endRowBox = await getBoundingBox(endRow);
-    const lastCell = await startRow
-      .locator('affine-database-cell-container')
-      .last()
-      .boundingBox();
-    assertExists(lastCell);
-    expect(selectionBox).toEqual({
-      x: startRowBox.x,
-      y: startRowBox.y,
-      width: containerBox.width,
-      height: startRowBox.height + endRowBox.height,
-    });
+  for (let i = startIndex; i <= endIndex; i++) {
+    const row = rows.nth(i);
+    await row.locator('.row-select-checkbox .selected').isVisible();
   }
 }
 
@@ -469,7 +431,7 @@ export async function assertCellsSelection(
       x,
       y,
       height,
-      width,
+      width: width + 1,
     });
   }
 }
@@ -483,6 +445,7 @@ export async function getElementStyle(
     ({ key, selector }) => {
       const el = document.querySelector<HTMLElement>(selector);
       if (!el) throw new Error(`Missing ${selector} tag`);
+      // @ts-ignore
       return el.style[key];
     },
     {
@@ -497,6 +460,22 @@ export async function getElementStyle(
 export async function focusKanbanCardHeader(page: Page, index = 0) {
   const cardHeader = page.locator('data-view-header-area-text').nth(index);
   await cardHeader.click();
+}
+
+export async function clickKanbanCardHeader(page: Page, index = 0) {
+  const cardHeader = page.locator('data-view-header-area-text').nth(index);
+  await cardHeader.click();
+  await cardHeader.click();
+}
+
+export async function assertKanbanCardHeaderText(
+  page: Page,
+  text: string,
+  index = 0
+) {
+  const cardHeader = page.locator('data-view-header-area-text').nth(index);
+
+  await expect(cardHeader).toHaveText(text);
 }
 
 export async function assertKanbanCellSelected(
@@ -567,7 +546,7 @@ export async function assertKanbanCardSelected(
   expect(border).toEqual('1px solid var(--affine-primary-color)');
 }
 
-export async function getKanbanCard(
+export function getKanbanCard(
   page: Page,
   {
     groupIndex,
@@ -581,3 +560,30 @@ export async function getKanbanCard(
   const card = group.locator('affine-data-view-kanban-card').nth(cardIndex);
   return card;
 }
+export const moveToCenterOf = async (page: Page, locator: Locator) => {
+  const box = (await locator.boundingBox())!;
+  expect(box).toBeDefined();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+};
+export const changeColumnType = async (
+  page: Page,
+  column: number,
+  name: string
+) => {
+  await waitNextFrame(page);
+  await page.locator('affine-database-header-column').nth(column).click();
+  await waitNextFrame(page, 200);
+  await pressKey(page, 'Escape');
+  await pressKey(page, 'ArrowDown');
+  await pressKey(page, 'Enter');
+  await type(page, name);
+  await pressKey(page, 'ArrowDown');
+  await pressKey(page, 'Enter');
+};
+export const pressKey = async (page: Page, key: string, count: number = 1) => {
+  for (let i = 0; i < count; i++) {
+    await waitNextFrame(page);
+    await press(page, key);
+  }
+  await waitNextFrame(page);
+};

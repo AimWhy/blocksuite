@@ -1,119 +1,158 @@
-import type { ListType, ParagraphType } from '@blocksuite/blocks';
-import { getServiceOrRegister } from '@blocksuite/blocks';
-import { checkboxPureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/checkbox/define';
-import { datePureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/date/define';
-import { linkPureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/link/define';
-import { multiSelectColumnConfig } from '@blocksuite/blocks/database-block/common/columns/multi-select/cell-renderer';
-import { numberPureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/number/define';
-import { progressPureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/progress/define';
-import { richTextPureColumnConfig } from '@blocksuite/blocks/database-block/common/columns/rich-text/define';
-import type { DatabaseBlockModel } from '@blocksuite/blocks/models';
+import {
+  databaseBlockColumns,
+  type DatabaseBlockModel,
+  type ListType,
+  type ParagraphType,
+  type ViewBasicDataType,
+} from '@blocksuite/blocks';
+import { viewPresets } from '@blocksuite/data-view/view-presets';
 import { assertExists } from '@blocksuite/global/utils';
-import { Text, type Workspace } from '@blocksuite/store';
+import { type DocCollection, Text } from '@blocksuite/store';
 
-import { type InitFn } from './utils';
+import type { InitFn } from './utils.js';
 
-export const database: InitFn = async (workspace: Workspace, id: string) => {
-  const page = workspace.createPage({ id });
-  page.awarenessStore.setFlag('enable_expand_database_block', true);
+import { propertyPresets } from '../../../../affine/data-view/src/property-presets';
 
-  await page.load(async () => {
-    // Add page block and surface block at root level
-    const pageBlockId = page.addBlock('affine:page', {
+export const database: InitFn = (collection: DocCollection, id: string) => {
+  const doc = collection.createDoc({ id });
+  doc.awarenessStore.setFlag('enable_database_number_formatting', true);
+  doc.awarenessStore.setFlag('enable_database_attachment_note', true);
+  doc.awarenessStore.setFlag('enable_database_full_width', true);
+  doc.awarenessStore.setFlag('enable_block_query', true);
+
+  doc.load(() => {
+    // Add root block and surface block at root level
+    const rootId = doc.addBlock('affine:page', {
       title: new Text('BlockSuite Playground'),
     });
-    page.addBlock('affine:surface', {}, pageBlockId);
+    doc.addBlock('affine:surface', {}, rootId);
 
-    // Add note block inside page block
-    const noteId = page.addBlock('affine:note', {}, pageBlockId);
-    const pId = page.addBlock('affine:paragraph', {}, noteId);
-    const model = page.getBlockById(pId);
+    // Add note block inside root block
+    const noteId = doc.addBlock('affine:note', {}, rootId);
+    const pId = doc.addBlock('affine:paragraph', {}, noteId);
+    const model = doc.getBlockById(pId);
     assertExists(model);
-    // Add database block inside note block
-    const databaseId = page.addBlock(
-      'affine:database',
-      {
-        columns: [],
-        cells: {},
-      },
-      noteId
-    );
-    const service = await getServiceOrRegister('affine:database');
-    service.initDatabaseBlock(page, model, databaseId, 'table', true);
-    const database = page.getBlockById(databaseId) as DatabaseBlockModel;
-    database.addColumn(
-      'end',
-      numberPureColumnConfig.create(numberPureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      richTextPureColumnConfig.create(richTextPureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      datePureColumnConfig.create(datePureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      linkPureColumnConfig.create(linkPureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      progressPureColumnConfig.create(progressPureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      checkboxPureColumnConfig.create(checkboxPureColumnConfig.name)
-    );
-    database.addColumn(
-      'end',
-      multiSelectColumnConfig.create(multiSelectColumnConfig.name)
-    );
-    database.updateView(database.views[0].id, () => {
-      return {
-        groupBy: {
-          columnId: database.columns[1].id,
-          type: 'groupBy',
-          name: 'select',
+    const addDatabase = (title: string, group = true) => {
+      const databaseId = doc.addBlock(
+        'affine:database',
+        {
+          columns: [],
+          cells: {},
         },
-      };
-    });
-    const paragraphTypes: ParagraphType[] = [
-      'text',
-      'quote',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-    ];
-    paragraphTypes.forEach(type => {
-      page.addBlock(
-        'affine:paragraph',
-        { type: type, text: new Text(`Paragraph type ${type}`) },
-        databaseId
+        noteId
       );
-    });
-    const listTypes: ListType[] = ['numbered', 'bulleted', 'todo', 'toggle'];
 
-    listTypes.forEach(type => {
-      page.addBlock(
-        'affine:list',
-        { type: type, text: new Text(`List type ${type}`) },
-        databaseId
-      );
-    });
-    // Add a paragraph after database
-    page.addBlock('affine:paragraph', {}, noteId);
-    page.addBlock('affine:paragraph', {}, noteId);
-    page.addBlock('affine:paragraph', {}, noteId);
-    page.addBlock('affine:paragraph', {}, noteId);
-    page.addBlock('affine:paragraph', {}, noteId);
-    database.addView('kanban');
+      new Promise(resolve => requestAnimationFrame(resolve))
+        .then(() => {
+          const service = window.host.std.getService('affine:database');
+          if (!service) return;
+          service.initDatabaseBlock(
+            doc,
+            model,
+            databaseId,
+            viewPresets.tableViewMeta.type,
+            true
+          );
+          const database = doc.getBlockById(databaseId) as DatabaseBlockModel;
+          database.title = new Text(title);
+          const richTextId = service.addColumn(
+            database,
+            'end',
+            databaseBlockColumns.richTextColumnConfig.create(
+              databaseBlockColumns.richTextColumnConfig.config.name
+            )
+          );
+          Object.values([
+            propertyPresets.multiSelectPropertyConfig,
+            propertyPresets.datePropertyConfig,
+            propertyPresets.numberPropertyConfig,
+            databaseBlockColumns.linkColumnConfig,
+            propertyPresets.checkboxPropertyConfig,
+            propertyPresets.progressPropertyConfig,
+          ]).forEach(column => {
+            service.addColumn(
+              database,
+              'end',
+              column.create(column.config.name)
+            );
+          });
+          service.updateView(database, database.views[0].id, () => {
+            return {
+              groupBy: group
+                ? {
+                    columnId: database.columns[1].id,
+                    type: 'groupBy',
+                    name: 'select',
+                  }
+                : undefined,
+            } as Partial<ViewBasicDataType>;
+          });
+          const paragraphTypes: ParagraphType[] = [
+            'text',
+            'quote',
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+          ];
+          paragraphTypes.forEach(type => {
+            const id = doc.addBlock(
+              'affine:paragraph',
+              { type: type, text: new Text(`Paragraph type ${type}`) },
+              databaseId
+            );
+            service.updateCell(database, id, {
+              columnId: richTextId,
+              value: new Text(`Paragraph type ${type}`),
+            });
+          });
+          const listTypes: ListType[] = [
+            'numbered',
+            'bulleted',
+            'todo',
+            'toggle',
+          ];
+
+          listTypes.forEach(type => {
+            const id = doc.addBlock(
+              'affine:list',
+              { type: type, text: new Text(`List type ${type}`) },
+              databaseId
+            );
+            service.updateCell(database, id, {
+              columnId: richTextId,
+              value: new Text(`List type ${type}`),
+            });
+          });
+          // Add a paragraph after database
+          doc.addBlock('affine:paragraph', {}, noteId);
+          doc.addBlock('affine:paragraph', {}, noteId);
+          doc.addBlock('affine:paragraph', {}, noteId);
+          doc.addBlock('affine:paragraph', {}, noteId);
+          doc.addBlock('affine:paragraph', {}, noteId);
+          service.databaseViewAddView(
+            database,
+            viewPresets.kanbanViewMeta.type
+          );
+
+          doc.resetHistory();
+        })
+        .catch(console.error);
+    };
+    // Add database block inside note block
+    addDatabase('Database 1', false);
+    addDatabase('Database 2');
+    addDatabase('Database 3');
+    addDatabase('Database 4');
+    addDatabase('Database 5');
+    addDatabase('Database 6');
+    addDatabase('Database 7');
+    addDatabase('Database 8');
+    addDatabase('Database 9');
+    addDatabase('Database 10');
   });
-
-  page.resetHistory();
 };
 
 database.id = 'database';
